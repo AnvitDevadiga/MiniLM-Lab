@@ -2,6 +2,8 @@
 
 An English-language, decoder-only Transformer built from first principles in PyTorch.
 
+[![CI](https://github.com/AnvitDevadiga/MiniLM-Lab/actions/workflows/ci.yml/badge.svg)](https://github.com/AnvitDevadiga/MiniLM-Lab/actions/workflows/ci.yml)
+
 **Author:** Anvit Devadiga
 
 This project is designed for three goals: understand how modern language models work, measure engineering trade-offs honestly, and produce a reproducible public portfolio project.
