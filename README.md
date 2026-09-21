@@ -1,70 +1,65 @@
 # MiniLM Lab
 
-### Build a small language model. Measure every trade-off. Understand the machinery.
+**A small language model, built from first principles.**
+
+Train it locally. Inspect every layer. Measure what actually changes.
 
 [![CI](https://github.com/AnvitDevadiga/MiniLM-Lab/actions/workflows/ci.yml/badge.svg)](https://github.com/AnvitDevadiga/MiniLM-Lab/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-Apple%20MPS-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.12%2B-black?logo=python&logoColor=white)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-MPS-black?logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![License](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE)
 
-**Author:** Anvit Devadiga
+**Anvit Devadiga**
 
-MiniLM Lab is a from-scratch, local-first decoder-only Transformer for learning how language models work—and proving what changes actually improve them. It trains on Apple Silicon, records reproducible metrics, and turns implementation details into controlled experiments.
+## What is this?
 
-## Why this project
+MiniLM Lab is a tiny GPT-style language model that you can train on a MacBook. It learns to predict the next piece of text. The point is not to compete with ChatGPT—the point is to understand how models like it are built, then test each design choice honestly.
 
-Most small language-model projects stop at “I trained a tiny GPT.” MiniLM Lab goes further: it compares tokenization, positional encoding, training strategy, fine-tuning, quantization, and inference systems with measurable evidence.
+## See the idea in one minute
 
-## What is implemented
-
-| Area | Implemented |
-|---|---|
-| Model | Decoder Transformer, causal attention, LayerNorm, tied embeddings |
-| Tokenization | Byte-level tokenizer and learned BPE tokenizer |
-| Positions | Learned embeddings and RoPE ablation path |
-| Training | Validation split, perplexity, gradient accumulation, checkpoints |
-| Generation | Temperature, top-k, top-p sampling, KV-cache decoding |
-| Efficiency | MPS support, generation benchmarks, dynamic-int8 utility |
-| Fine-tuning | LoRA building block |
-| Quality | Tests, linting, CI, bits-per-byte evaluation, experiment logs |
-
-## Architecture
-
-```mermaid
-flowchart LR
-    A[English text] --> B[Byte or BPE tokenizer]
-    B --> C[Training batches]
-    C --> D[Token embeddings]
-    D --> E[Causal self-attention]
-    E --> F[Transformer blocks]
-    F --> G[Next-token loss]
-    G --> H[Checkpoint + metrics]
-    H --> I[Sampling and KV-cache inference]
+```text
+text → tokenizer → Transformer → next-token prediction → generated text
+              ↘ validation metrics + benchmarks ↗
 ```
 
-## Recorded baseline
-
-Experiments use the Tiny Shakespeare corpus on Apple Silicon MPS.
-
-| Experiment | Result |
-|---|---:|
-| Byte tokenizer best validation perplexity | **5.14** |
-| BPE tokenizer best validation perplexity | **7.99** |
-| BPE full-split perplexity | **10.94** |
-| BPE bits per byte | **2.4814** |
-| Recorded generation throughput | **523 tokens/sec** |
-
-Perplexity across tokenizers is not directly comparable because the token units differ. The project therefore also records bits per byte and qualitative generation results. See the [research report](docs/research_report.md) for methodology and limitations.
-
-![Tokenizer comparison](docs/results.svg)
+| Question | What this project measures |
+| --- | --- |
+| How does text become numbers? | Byte-level tokenizer vs BPE |
+| How does the model remember position? | Learned positions vs RoPE |
+| How do we train it efficiently? | Checkpoints, accumulation, LoRA |
+| How do we generate faster? | Sampling, KV cache, quantization |
 
 ## Demo
 
-> Demo video coming soon — this space is reserved for a short training-to-generation walkthrough.
+> **Demo video coming soon.**  
+> This space is reserved for a short training → evaluation → generation walkthrough.
 
-<!-- Replace this block with the uploaded demo link or a GitHub video attachment. -->
+<!-- Add the GitHub video attachment or YouTube link here. -->
 
-## Quickstart
+## Results
+
+Recorded on Apple Silicon MPS using the Tiny Shakespeare corpus.
+
+![MiniLM Lab recorded results](docs/results.svg)
+
+| Run | Best validation perplexity | Inference |
+| --- | ---: | ---: |
+| Byte tokenizer | **5.14** | **523 tokens/sec** |
+| 512-token BPE | **7.99** | More word-like samples |
+
+Perplexity is tokenization-dependent, so the project also records full-split perplexity and bits per byte. See the [research report](docs/research_report.md) for the details and limitations.
+
+## How it works
+
+```text
+English text → Byte / BPE tokenizer → Transformer + attention
+                                           ↓
+                                  next-token prediction
+                                           ↓
+                              evaluate → save → generate
+```
+
+## Quick start
 
 ```bash
 python3.12 -m venv .venv
@@ -73,14 +68,14 @@ python -m pip install -e '.[dev]'
 make check
 ```
 
-Run a named experiment without overwriting earlier results:
+Train an isolated experiment:
 
 ```bash
 python scripts/run_experiment.py byte-10000 data/tinyshakespeare.txt \
   --steps 10000 --eval-interval 250
 ```
 
-Generate text:
+Generate text from its best checkpoint:
 
 ```bash
 python scripts/generate.py "To be or not to be" \
@@ -88,25 +83,22 @@ python scripts/generate.py "To be or not to be" \
   --tokens 200 --top-k 40 --top-p 0.95
 ```
 
-Benchmark cached versus uncached inference:
+## Project map
 
-```bash
-python scripts/benchmark_kv_cache.py \
-  --checkpoint artifacts/runs/byte-10000/best_checkpoint.pt --tokens 200
+```text
+src/minilm_lab/   model, tokenizers, generation, KV cache, LoRA
+scripts/          train, evaluate, benchmark, and compare
+tests/            correctness and smoke tests
+docs/             research report and experiment log
 ```
 
-## Repository map
+## Learn more
 
-- `src/minilm_lab/` — model, tokenizers, generation, KV cache, LoRA
-- `scripts/` — training, evaluation, benchmarking, and experiment commands
-- `tests/` — correctness and smoke tests
-- `docs/research_report.md` — methodology, results, and limitations
-- `docs/experiment_log.md` — experiment template and comparison plan
-
-## Status
-
-The core system and first research baselines are complete. The next research runs are matched RoPE comparisons, KV-cache latency measurements, LoRA fine-tuning, and int8 quality/size trade-offs.
+- [Research report](docs/research_report.md)
+- [Experiment log](docs/experiment_log.md)
+- [Roadmap](docs/roadmap.md)
+- [Contributing](CONTRIBUTING.md)
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. Built by Anvit Devadiga.
