@@ -1,0 +1,9 @@
+Language models learn patterns from examples. A small model can still teach us important ideas about tokens, attention, prediction, and generation. Training repeatedly adjusts the model so that it becomes better at predicting the next byte in a sequence. Careful experiments help us understand what improves quality, speed, and memory usage.
+
+Learning systems improve through measurement. We separate training examples from validation examples so that a falling training loss does not fool us into believing that the model can generalize. Perplexity gives us another way to describe how surprised a model is by text. Lower perplexity usually means better next-token predictions, although a single number never tells the whole story.
+
+The Transformer reads a context window and updates a representation for every position. Causal attention ensures that a position cannot look into the future. The model therefore has to predict what comes next using only the preceding context. This simple rule is the foundation of autoregressive language generation.
+
+Good engineering is reproducible. We record the random seed, model size, context length, optimizer, learning rate, device, and validation results. We save checkpoints so an experiment can resume. We compare one change at a time, explain what happened, and publish the evidence instead of making unsupported claims.
+
+This laboratory studies how language models work. It values clear code, careful experiments, honest limitations, and useful explanations. The goal is not to pretend that a small model is a commercial assistant. The goal is to understand the machinery deeply enough to build, test, and improve it responsibly.
