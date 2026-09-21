@@ -58,6 +58,12 @@ Perplexity across tokenizers is not directly comparable because the token units 
 
 ![Tokenizer comparison](docs/results.svg)
 
+## Demo
+
+> Demo video coming soon — this space is reserved for a short training-to-generation walkthrough.
+
+<!-- Replace this block with the uploaded demo link or a GitHub video attachment. -->
+
 ## Quickstart
 
 ```bash
