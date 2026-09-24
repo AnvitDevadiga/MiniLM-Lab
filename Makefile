@@ -1,4 +1,4 @@
-.PHONY: check test lint report
+.PHONY: check test lint report assets
 
 test:
 	.venv/bin/pytest -q
@@ -8,5 +8,7 @@ lint:
 
 check: lint test
 
-report:
-	.venv/bin/python scripts/build_results_svg.py
+report: assets
+
+assets:
+	.venv/bin/python scripts/build_report_assets.py

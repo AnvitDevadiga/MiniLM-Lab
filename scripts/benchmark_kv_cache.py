@@ -1,4 +1,5 @@
 import argparse
+import json
 import time
 from pathlib import Path
 
@@ -14,6 +15,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", type=Path, default=Path("artifacts/best_checkpoint.pt"))
     parser.add_argument("--tokens", type=int, default=100)
+    parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args()
     device = "mps" if torch.backends.mps.is_available() else "cpu"
     checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=False)
@@ -31,7 +33,19 @@ def main() -> None:
     if device == "mps":
         torch.mps.synchronize()
     cached = time.perf_counter() - start
-    print(f"device={device} tokens={args.tokens} uncached_seconds={uncached:.3f} cached_seconds={cached:.3f} speedup={uncached / cached:.2f}x")
+    result = {
+        "device": device,
+        "generated_tokens": args.tokens,
+        "uncached_seconds": uncached,
+        "cached_seconds": cached,
+        "uncached_tokens_per_second": args.tokens / uncached,
+        "cached_tokens_per_second": args.tokens / cached,
+        "speedup": uncached / cached,
+    }
+    print(json.dumps(result, indent=2))
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

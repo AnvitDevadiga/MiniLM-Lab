@@ -25,11 +25,12 @@ def main() -> None:
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--tokenizer", type=Path, default=None, help="BPE JSON artifact; omit for byte tokenizer")
     parser.add_argument("--gradient-accumulation-steps", type=int, default=1)
+    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts"))
     args = parser.parse_args()
     output = args.output_dir / "tiny_checkpoint.pt"
-    output.parent.mkdir(exist_ok=True)
-    torch.manual_seed(42)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    torch.manual_seed(args.seed)
     device = choose_device()
     tokenizer = BPETokenizer.load(args.tokenizer) if args.tokenizer else ByteTokenizer()
     ids = torch.tensor(tokenizer.encode(load_text(args.text)), dtype=torch.long)
@@ -41,8 +42,18 @@ def main() -> None:
     optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4)
     metrics = []
     best_validation_loss = float("inf")
+    start_step = 0
+    if args.resume and output.exists():
+        checkpoint = torch.load(output, map_location=device, weights_only=False)
+        model.load_state_dict(checkpoint["model"])
+        if "optimizer" in checkpoint:
+            optimizer.load_state_dict(checkpoint["optimizer"])
+        metrics = checkpoint.get("metrics", [])
+        best_validation_loss = checkpoint.get("best_validation_loss", best_validation_loss)
+        start_step = checkpoint.get("step", len(metrics)) + 1
+        print(f"resumed {output} at step={start_step}")
     optimizer.zero_grad(set_to_none=True)
-    for step in range(args.steps):
+    for step in range(start_step, start_step + args.steps):
         inputs, targets = make_batch(train_ids, 8, config.context_length, device)
         _, loss = model(inputs, targets)
         scaled_loss = loss / args.gradient_accumulation_steps
@@ -64,12 +75,8 @@ def main() -> None:
             print(f"step={step:04d} train_loss={loss.item():.4f} val_loss={validation_loss.item():.4f} val_ppl={validation_perplexity:.2f} device={device}")
             if validation_loss.item() < best_validation_loss:
                 best_validation_loss = validation_loss.item()
-                torch.save({"model": model.state_dict(), "config": config.__dict__, "metrics": metrics, "best_validation_loss": best_validation_loss, "tokenizer": str(args.tokenizer) if args.tokenizer else "byte"}, args.output_dir / "best_checkpoint.pt")
-    if args.resume and output.exists():
-        checkpoint = torch.load(output, map_location=device, weights_only=False)
-        model.load_state_dict(checkpoint["model"])
-        print(f"resumed {output}")
-    torch.save({"model": model.state_dict(), "config": config.__dict__, "metrics": metrics, "tokenizer": str(args.tokenizer) if args.tokenizer else "byte"}, output)
+                torch.save({"model": model.state_dict(), "config": config.__dict__, "metrics": metrics, "best_validation_loss": best_validation_loss, "step": step, "seed": args.seed, "tokenizer": str(args.tokenizer) if args.tokenizer else "byte"}, args.output_dir / "best_checkpoint.pt")
+    torch.save({"model": model.state_dict(), "config": config.__dict__, "optimizer": optimizer.state_dict(), "metrics": metrics, "best_validation_loss": best_validation_loss, "step": start_step + args.steps - 1, "seed": args.seed, "tokenizer": str(args.tokenizer) if args.tokenizer else "byte"}, output)
     (args.output_dir / "metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
     print(f"saved {output}")
 

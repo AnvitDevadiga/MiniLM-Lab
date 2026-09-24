@@ -17,6 +17,7 @@ def main() -> None:
     parser.add_argument("text", type=Path)
     parser.add_argument("--checkpoint", type=Path, default=Path("artifacts/best_checkpoint.pt"))
     parser.add_argument("--batch-size", type=int, default=8)
+    parser.add_argument("--output", type=Path, default=Path("artifacts/evaluation.json"))
     args = parser.parse_args()
     device = "mps" if torch.backends.mps.is_available() else "cpu"
     checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=False)
@@ -50,7 +51,8 @@ def main() -> None:
         "bits_per_byte": loss * token_count / text_bytes / math.log(2),
         "validation_tokens": total_tokens,
     }
-    Path("artifacts/evaluation.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(result, indent=2))
 
 

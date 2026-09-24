@@ -12,7 +12,7 @@ The central principle is measurement: every meaningful change should be evaluate
 
 ## System
 
-The current baseline is a four-layer decoder Transformer with 192-dimensional representations, six attention heads, a 128-token context window, LayerNorm, GELU feed-forward blocks, tied input/output embeddings, and AdamW optimization. The default vocabulary is byte-level; a learned 512-token BPE vocabulary is also supported.
+The current baseline is a four-layer decoder Transformer with 192-dimensional representations, six attention heads, a 128-token context window, RMSNorm, SwiGLU feed-forward blocks, tied input/output embeddings, and AdamW optimization. Learned positional embeddings and RoPE are selectable. The default vocabulary is byte-level; a learned 512-token BPE vocabulary is also supported.
 
 Supported components include:
 
@@ -40,25 +40,28 @@ python scripts/benchmark_generation.py --checkpoint artifacts/best_checkpoint.pt
 
 ## Results
 
-The preserved experiment summary is available as [experiment_summary.json](../artifacts/experiment_summary.json), with a visual comparison in [tokenizer_comparison.svg](../artifacts/tokenizer_comparison.svg).
+The current numbers below use the upgraded RMSNorm/SwiGLU architecture, a fixed 1,000-step budget, and CPU validation. Throughput is hardware-specific; the recorded run is evidence of correctness and relative behavior, not a universal performance claim.
+
+The preserved experiment summary is tracked in [experiment_summary.json](data/experiment_summary.json), with the publication-style comparison in [results-dashboard.svg](figures/results-dashboard.svg). Regenerate the figures with `make assets` after changing the data.
 
 ### Byte-level baseline
 
 Using the Tiny Shakespeare corpus and 10,000 training steps:
 
-- best logged validation perplexity: **5.14**
-- final logged validation perplexity: **5.41**
-- generation throughput: approximately **523 tokens/second** on MPS in the recorded run
+- best logged validation perplexity: **14.98**
+- full-split validation perplexity: **15.36**
+- generation throughput: **715.84 tokens/second** on the CPU validation run
+- KV-cache speedup: **2.74×** for 128 generated tokens
 
 ### BPE experiment
 
 Using the same corpus, model shape, and training budget with a learned 512-token BPE vocabulary:
 
-- best logged validation perplexity: **7.99**
-- final logged validation perplexity: **9.40**
-- full-split evaluation report: [evaluation.json](../artifacts/evaluation.json)
-- full-split perplexity in the saved evaluation: **10.94**
-- full-split bits per byte: **2.4814**
+- best logged validation perplexity: **43.78**
+- full-split evaluation perplexity: **40.70**
+- full-split bits per byte: **3.8444**
+- generation throughput: **736.40 tokens/second** on the CPU validation run
+- KV-cache speedup: **2.73×** for 128 generated tokens
 
 Raw perplexity across tokenizers must not be treated as a direct quality ranking because the token units differ. Bits per byte and qualitative generation are more appropriate cross-tokenizer comparisons. The BPE model produced more recognisable word and dialogue structure in qualitative samples, while the byte model achieved lower token-level perplexity.
 
@@ -68,7 +71,7 @@ Raw perplexity across tokenizers must not be treated as a direct quality ranking
 2. Validation metrics fluctuate across stochastic batches, so full-split evaluation is more reliable than a single printed validation batch.
 3. BPE preprocessing must be implemented with care: a naive repeated full-corpus merge scan was unacceptably slow, while cached chunk encoding reduced preprocessing to well under a second for this corpus.
 4. Best-checkpoint selection matters because the final training step is not always the best validation step.
-5. KV caching changes the inference computation pattern by reusing previous keys and values instead of recomputing the entire context for every generated token.
+5. KV caching changes the inference computation pattern by reusing previous keys and values instead of recomputing the entire context for every generated token. The repository now verifies that cached logits match full-forward logits for both supported positional-encoding modes.
 
 ## Limitations
 
@@ -79,6 +82,6 @@ This is an educational and research baseline, not a general-purpose assistant. T
 - compare learned positions against RoPE with matched seeds and budgets
 - benchmark uncached versus KV-cached generation on identical prompts
 - run full and LoRA fine-tuning comparisons
-- measure dynamic-int8 CPU size, latency, and quality impact
+- measure dynamic-int8 CPU size, latency, and quality impact; PyTorch documents the current eager quantization APIs as migration candidates for torchao ([quantization roadmap](https://docs.pytorch.org/docs/main/quantization))
 - compare 10M, 20M, and larger models within Mac memory limits
 - publish plots from `artifacts/metrics.json` and the evaluation reports

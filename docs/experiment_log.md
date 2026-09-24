@@ -13,13 +13,18 @@ Each published experiment should record:
 - checkpoint path
 - one short conclusion
 
-## Planned runs
+## Completed baseline runs
 
 | Run | Change | Primary comparison |
 |---|---|---|
-| byte-10000 | byte tokenizer baseline | reference quality and speed |
-| bpe-10000 | 512-token BPE | tokenization trade-off |
-| rope-10000 | RoPE positions | positional encoding |
-| kv-cache | cached decoding | inference latency |
+| modern-byte-1000 | byte tokenizer, RMSNorm + SwiGLU | quality and speed |
+| modern-bpe-1000 | 512-token BPE, RMSNorm + SwiGLU | tokenizer trade-off |
+| modern-kv-cache | sliding-window cached decoding | 2.74× CPU speedup |
+
+## Next controlled comparisons
+
+| Run | Change | Primary comparison |
+|---|---|---|
+| rope-1000 | learned positions vs RoPE | positional encoding |
 | lora | adapter fine-tuning | trainable parameter efficiency |
 | int8 | dynamic quantization | CPU size and latency |

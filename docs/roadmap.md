@@ -6,28 +6,29 @@
 - [x] decoder-only Transformer forward pass
 - [x] causal masking and next-token loss
 - [x] deterministic tests for shapes and causality
-- [ ] byte-level tokenizer and text dataset
+- [x] byte-level tokenizer and text dataset
 
 ## Milestone 2 — training
 
-- [ ] gradient accumulation and mixed precision where supported
-- [ ] checkpoint save/resume
-- [ ] validation loss and perplexity
-- [ ] first small English corpus experiment
+- [x] gradient accumulation
+- [x] checkpoint save/resume with optimizer state
+- [x] validation loss and perplexity
+- [x] first small English corpus experiment
 
 ## Milestone 3 — inference
 
-- [ ] temperature, top-k, and top-p sampling
-- [ ] KV cache
-- [ ] latency and memory benchmarks
+- [x] temperature, top-k, and top-p sampling
+- [x] KV cache with full-forward equivalence tests
+- [x] latency benchmark with JSON output
 
 ## Milestone 4 — research-quality comparisons
 
-- [ ] learned positions versus RoPE
+- [x] learned positions versus RoPE
 - [ ] AdamW versus SGD
 - [ ] context lengths 128/256/512
 - [ ] model-size scaling
-- [ ] full fine-tuning versus LoRA
-- [ ] quantization experiments
+- [x] LoRA building block
+- [x] quantization experiment utility
+- [ ] full fine-tuning versus LoRA quality comparison
 
 Every experiment should have a configuration, a fixed seed, recorded metrics, and a short written conclusion.

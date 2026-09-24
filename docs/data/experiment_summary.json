@@ -1,0 +1,26 @@
+{
+  "author": "Anvit Devadiga",
+  "corpus": "Tiny Shakespeare",
+  "hardware": "CPU validation run",
+  "status": "current-modern-architecture",
+  "training_steps": 1000,
+  "architecture": "RMSNorm + SwiGLU + tied embeddings",
+  "experiments": [
+    {
+      "name": "Byte tokenizer",
+      "best_validation_perplexity": 14.98,
+      "full_split_perplexity": 15.3619,
+      "bits_per_byte": 3.9413,
+      "generation_tokens_per_second": 715.84,
+      "kv_cache_speedup": 2.744
+    },
+    {
+      "name": "512-token BPE",
+      "best_validation_perplexity": 43.78,
+      "full_split_perplexity": 40.6996,
+      "bits_per_byte": 3.8444,
+      "generation_tokens_per_second": 736.40,
+      "kv_cache_speedup": 2.726
+    }
+  ]
+}

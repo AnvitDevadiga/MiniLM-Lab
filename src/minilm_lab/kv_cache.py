@@ -13,5 +13,10 @@ def generate_with_kv_cache(model, prompt: str, tokenizer: ByteTokenizer, max_new
         probabilities = torch.softmax(logits[:, -1, :] / max(temperature, 1e-6), dim=-1)
         next_token = torch.multinomial(probabilities, 1)
         tokens = torch.cat((tokens, next_token), dim=1)
-        logits, cache = model.forward_cached(next_token, cache)
+        if tokens.size(1) > model.config.context_length:
+            # Rebuild the cache from the active sliding window. This keeps
+            # long generation requests valid while bounding memory.
+            logits, cache = model.forward_cached(tokens[:, -model.config.context_length :])
+        else:
+            logits, cache = model.forward_cached(next_token, cache)
     return tokenizer.decode(tokens[0].tolist())
