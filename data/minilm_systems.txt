@@ -1,0 +1,820 @@
+
+===== README.md =====
+
+# MiniLM Lab
+
+**A measurable decoder-only Transformer built from first principles.**
+
+Research code for understanding the systems behind small language models.
+
+[![CI](https://github.com/AnvitDevadiga/MiniLM-Lab/actions/workflows/ci.yml/badge.svg)](https://github.com/AnvitDevadiga/MiniLM-Lab/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/Python-3.12%2B-111111?logo=python&logoColor=white)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.2%2B-111111?logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![License](https://img.shields.io/badge/License-MIT-111111.svg)](LICENSE)
+
+**Maintainer:** Anvit Devadiga · **Status:** reproducible research baseline
+
+![MiniLM Lab benchmark dashboard](docs/figures/results-dashboard.svg)
+
+MiniLM Lab is a local-first ML systems laboratory. It implements the path from bytes to next-token generation, then measures the trade-offs instead of hiding them behind framework abstractions. The repository is intentionally small, documented, and reproducible: every result has a protocol, a data source, and an explicit limitation.
+
+![MiniLM Lab architecture](docs/figures/architecture.svg)
+
+## What is implemented
+
+```text
+text → byte/BPE tokenizer → embeddings → causal attention → RoPE/RMSNorm
+                            → SwiGLU MLP → tied LM head → loss/generation
+```
+
+| Area | Implementation | Evidence |
+| --- | --- | --- |
+| Tokenization | byte-level and learned BPE | round-trip tests, tokenizer trainer |
+| Transformer | causal MHA, SDPA, learned positions, RoPE, RMSNorm, SwiGLU | shape, loss, RoPE tests |
+| Training | AdamW, accumulation, validation, best checkpoints | `train_tiny.py` |
+| Inference | temperature, top-k, top-p, incremental KV cache | cache equivalence tests |
+| Adaptation | LoRA linear adapter | trainable-parameter test |
+| Compression | CPU dynamic INT8 experiment | `quantize.py` |
+| Measurement | throughput, cache speedup, perplexity, bits/byte | benchmark scripts and reports |
+
+## Quick start
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[dev]'
+make check
+```
+
+Train and evaluate a small run:
+
+```bash
+python scripts/train_tiny.py data/tinyshakespeare.txt --steps 1000 --eval-interval 100
+python scripts/evaluate.py data/tinyshakespeare.txt --checkpoint artifacts/best_checkpoint.pt
+python scripts/generate.py 'To be or not to be' --checkpoint artifacts/best_checkpoint.pt --tokens 200
+```
+
+Train a BPE vocabulary and run the same experiment:
+
+```bash
+python scripts/train_tokenizer.py data/tinyshakespeare.txt --vocab-size 512 --output artifacts/bpe.json
+python scripts/train_tiny.py data/tinyshakespeare.txt --tokenizer artifacts/bpe.json --steps 1000
+```
+
+Benchmark the systems question directly:
+
+```bash
+python scripts/benchmark_kv_cache.py --checkpoint artifacts/best_checkpoint.pt --tokens 100 --output artifacts/kv_cache.json
+python scripts/benchmark_generation.py --checkpoint artifacts/best_checkpoint.pt --tokens 100 --output artifacts/generation.json
+```
+
+## Project map
+
+```text
+src/minilm_lab/   model, tokenizers, data, generation, KV cache, LoRA
+scripts/          training, evaluation, generation, profiling, quantization
+tests/            correctness and regression tests
+docs/             audit, protocol, research report, experiment log
+configs/          small reproducible configurations
+```
+
+## Results and interpretation
+
+The checked-in dashboard contains the current 1,000-step baseline for the upgraded RMSNorm + SwiGLU architecture. The run was validated on CPU; rerun on Apple Silicon MPS for hardware-specific throughput. Token-level perplexity cannot be compared directly across different vocabularies; use bits per byte and matched-budget qualitative samples as complementary evidence.
+
+The benchmark data is tracked at [docs/data/experiment_summary.json](docs/data/experiment_summary.json), and the figures are regenerated with:
+
+```bash
+python scripts/build_report_assets.py
+```
+
+- [Implementation audit](docs/implementation_audit.md)
+- [Research report](docs/research_report.md)
+- [Experiment protocol](docs/experiment_protocol.md)
+- [Experiment log](docs/experiment_log.md)
+- [Roadmap](docs/roadmap.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Citation](CITATION.cff)
+
+## Scope
+
+This is an educational, reproducible systems project—not a general-purpose assistant. Tiny Shakespeare is narrow and small. Results describe this corpus, model size, software stack, and hardware; they are not claims about broad language understanding.
+
+## License
+
+MIT. Built by Anvit Devadiga.
+
+
+===== CONTRIBUTING.md =====
+
+# Contributing
+
+MiniLM Lab values small, reproducible experiments.
+
+Before opening a pull request:
+
+```bash
+source .venv/bin/activate
+ruff check .
+pytest -q
+```
+
+For model or training changes, include the configuration, seed, corpus, device, validation metrics, and a short explanation of the result. Do not commit checkpoints, virtual environments, or generated run directories.
+
+
+===== LICENSE =====
+
+MIT License
+
+Copyright (c) 2026 Anvit Devadiga
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+===== configs/tiny.yaml =====
+
+# Safe starting point for a MacBook Air M4.
+seed: 42
+device: auto
+vocab_size: 256
+context_length: 128
+embedding_dim: 192
+num_layers: 4
+num_heads: 6
+dropout: 0.0
+batch_size: 8
+gradient_accumulation_steps: 4
+learning_rate: 0.0003
+max_steps: 1000
+
+
+===== docs/experiment_log.md =====
+
+# Experiment Log
+
+Each published experiment should record:
+
+- run name and date
+- corpus and tokenizer
+- model configuration
+- training steps and optimizer settings
+- device and software versions
+- best and final validation loss/perplexity
+- bits per byte when comparing tokenizers
+- generation throughput and cache mode
+- checkpoint path
+- one short conclusion
+
+## Completed baseline runs
+
+| Run | Change | Primary comparison |
+|---|---|---|
+| modern-byte-1000 | byte tokenizer, RMSNorm + SwiGLU | quality and speed |
+| modern-bpe-1000 | 512-token BPE, RMSNorm + SwiGLU | tokenizer trade-off |
+| modern-kv-cache | sliding-window cached decoding | 2.74× CPU speedup |
+
+## Next controlled comparisons
+
+| Run | Change | Primary comparison |
+|---|---|---|
+| rope-1000 | learned positions vs RoPE | positional encoding |
+| lora | adapter fine-tuning | trainable parameter efficiency |
+| int8 | dynamic quantization | CPU size and latency |
+
+
+===== docs/experiment_protocol.md =====
+
+# Experiment protocol
+
+Use this protocol before publishing a number in the README or research report.
+
+## Fixed controls
+
+- corpus: `data/tinyshakespeare.txt`
+- split: contiguous 90% train / 10% validation
+- seed: `42`
+- optimizer: AdamW, learning rate `3e-4`
+- batch size: `8`
+- context length: `128`
+- evaluation: full validation split where possible, not one random batch
+- reporting: validation loss, token perplexity, bits per token, bits per byte, wall time, peak memory, and tokens/sec
+
+## Comparison rules
+
+1. Change one variable at a time.
+2. Keep seed, token budget, model width/depth, and evaluation split fixed.
+3. Report software versions, backend, device, and commit.
+4. Report mean and standard deviation across at least three seeds for claims stronger than a smoke test.
+5. Do not rank byte and BPE models by token perplexity alone. Token units differ.
+6. For cache tests, assert numerical equivalence before measuring latency.
+7. Warm up the device before timing and synchronize asynchronous backends before reading the clock.
+
+## Experiment matrix
+
+| ID | Variable | Primary metric | Secondary metric |
+| --- | --- | --- | --- |
+| 01 | learned positions vs RoPE | validation loss | length generalization |
+| 02 | framework MHA vs SDPA | tokens/sec | peak memory |
+| 03 | no cache vs KV cache | decode latency | speedup vs context |
+| 04 | model size | loss per training token | memory and throughput |
+| 05 | full tuning vs LoRA | quality at fixed budget | trainable parameters |
+| 06 | FP32 vs INT8 CPU | latency and size | validation loss |
+
+## Run record
+
+For every run, save:
+
+```text
+config, seed, git commit, corpus hash, device, torch version,
+train/validation curves, best checkpoint, evaluation JSON, generated samples
+```
+
+The benchmark scripts accept `--output` so results can be stored as machine-readable JSON rather than copied from a terminal.
+
+
+===== docs/implementation_audit.md =====
+
+# Implementation audit
+
+## Baseline audit
+
+The original repository had the right breadth but several claims were ahead of the evidence. The most important gaps were correctness and reproducibility, not missing prose.
+
+| Finding | Impact | Resolution |
+| --- | --- | --- |
+| Cached attention reshaped projected tensors twice | cached logits diverged from full forward | fixed tensor layout and added equivalence tests |
+| Cached blocks skipped the MLP sublayer | generation used a different model than training | cache path now runs the complete block |
+| RoPE was not applied in cached decoding | RoPE experiments were invalid during generation | cache path now applies the absolute position offset |
+| Cache could silently run past the context window | invalid position/cache state | explicit context-limit error |
+| Architecture was LayerNorm + GELU only | did not match the stated modern decoder design | RMSNorm + SwiGLU are now the default; legacy options remain |
+| Benchmarks only printed terminal text | results were hard to reproduce or plot | benchmark JSON output added |
+| Resume loaded after training | `--resume` did not resume the run | retained as a follow-up item until optimizer-state checkpoints are added |
+
+## Verification status
+
+The local project environment passes 12 tests. The key invariant is:
+
+```text
+full forward(prompt + token)[-1] == cached forward(prompt) → cached forward(token)[-1]
+```
+
+This is tested for both learned positional embeddings and RoPE. Exact throughput and quality numbers remain hardware- and seed-dependent; they must be regenerated after architecture changes.
+
+## Honest limitations
+
+- The bundled corpus is intentionally small and narrow.
+- The BPE trainer is educational, not a production tokenizer.
+- Dynamic INT8 is a CPU comparison utility. PyTorch is migrating quantization work toward torchao; the old API should not be presented as a production deployment path.
+- MPS mixed precision should be benchmarked on the target machine rather than assumed. See the [PyTorch MPS notes](https://docs.pytorch.org/docs/main/notes/mps.html).
+
+
+===== docs/research_report.md =====
+
+# MiniLM Lab: A From-Scratch Transformer Training and Inference Study
+
+**Author:** Anvit Devadiga  
+**Status:** Reproducible baseline and systems experiments  
+**Hardware:** Apple Silicon MacBook Air using PyTorch MPS when available
+
+## Abstract
+
+MiniLM Lab is a small decoder-only language-model system implemented to understand modern language-model components from first principles. The project includes tokenization, causal self-attention, positional encoding, training, validation, checkpointing, sampling, evaluation, parameter-efficient fine-tuning utilities, quantization experiments, and KV-cache inference.
+
+The central principle is measurement: every meaningful change should be evaluated with a fixed corpus, reproducible configuration, validation metrics, and an explicit explanation of trade-offs.
+
+## System
+
+The current baseline is a four-layer decoder Transformer with 192-dimensional representations, six attention heads, a 128-token context window, RMSNorm, SwiGLU feed-forward blocks, tied input/output embeddings, and AdamW optimization. Learned positional embeddings and RoPE are selectable. The default vocabulary is byte-level; a learned 512-token BPE vocabulary is also supported.
+
+Supported components include:
+
+- byte-level and learned BPE tokenization
+- causal multi-head self-attention
+- learned positional embeddings and RoPE
+- gradient accumulation
+- checkpoint and best-checkpoint saving
+- validation loss, perplexity, and bits-per-byte evaluation
+- temperature, top-k, and top-p sampling
+- KV-cache incremental generation
+- LoRA building block
+- CPU dynamic-int8 quantization utility
+
+## Reproduction
+
+```bash
+source .venv/bin/activate
+python scripts/train_tokenizer.py data/tinyshakespeare.txt --vocab-size 512 --output artifacts/bpe.json
+python scripts/train_tiny.py data/tinyshakespeare.txt --steps 10000 --eval-interval 250
+python scripts/evaluate.py data/tinyshakespeare.txt --checkpoint artifacts/best_checkpoint.pt
+python scripts/generate.py "To be or not to be" --checkpoint artifacts/best_checkpoint.pt --tokens 200 --top-k 40 --top-p 0.95
+python scripts/benchmark_generation.py --checkpoint artifacts/best_checkpoint.pt --tokens 200
+```
+
+## Results
+
+The current numbers below use the upgraded RMSNorm/SwiGLU architecture, a fixed 1,000-step budget, and CPU validation. Throughput is hardware-specific; the recorded run is evidence of correctness and relative behavior, not a universal performance claim.
+
+The preserved experiment summary is tracked in [experiment_summary.json](data/experiment_summary.json), with the publication-style comparison in [results-dashboard.svg](figures/results-dashboard.svg). Regenerate the figures with `make assets` after changing the data.
+
+### Byte-level baseline
+
+Using the Tiny Shakespeare corpus and 10,000 training steps:
+
+- best logged validation perplexity: **14.98**
+- full-split validation perplexity: **15.36**
+- generation throughput: **715.84 tokens/second** on the CPU validation run
+- KV-cache speedup: **2.74×** for 128 generated tokens
+
+### BPE experiment
+
+Using the same corpus, model shape, and training budget with a learned 512-token BPE vocabulary:
+
+- best logged validation perplexity: **43.78**
+- full-split evaluation perplexity: **40.70**
+- full-split bits per byte: **3.8444**
+- generation throughput: **736.40 tokens/second** on the CPU validation run
+- KV-cache speedup: **2.73×** for 128 generated tokens
+
+Raw perplexity across tokenizers must not be treated as a direct quality ranking because the token units differ. Bits per byte and qualitative generation are more appropriate cross-tokenizer comparisons. The BPE model produced more recognisable word and dialogue structure in qualitative samples, while the byte model achieved lower token-level perplexity.
+
+## Engineering findings
+
+1. A tiny byte-level Transformer can learn strong corpus-specific character and formatting patterns on Apple MPS.
+2. Validation metrics fluctuate across stochastic batches, so full-split evaluation is more reliable than a single printed validation batch.
+3. BPE preprocessing must be implemented with care: a naive repeated full-corpus merge scan was unacceptably slow, while cached chunk encoding reduced preprocessing to well under a second for this corpus.
+4. Best-checkpoint selection matters because the final training step is not always the best validation step.
+5. KV caching changes the inference computation pattern by reusing previous keys and values instead of recomputing the entire context for every generated token. The repository now verifies that cached logits match full-forward logits for both supported positional-encoding modes.
+
+## Limitations
+
+This is an educational and research baseline, not a general-purpose assistant. Tiny Shakespeare is a small, narrow corpus; the model is not expected to produce reliable factual answers or broad English knowledge. The current LoRA and quantization components are experiment utilities and require dedicated end-to-end benchmark runs before strong conclusions can be made. Cross-tokenizer comparisons require additional normalization and should not rely on perplexity alone.
+
+## Next experiments
+
+- compare learned positions against RoPE with matched seeds and budgets
+- benchmark uncached versus KV-cached generation on identical prompts
+- run full and LoRA fine-tuning comparisons
+- measure dynamic-int8 CPU size, latency, and quality impact; PyTorch documents the current eager quantization APIs as migration candidates for torchao ([quantization roadmap](https://docs.pytorch.org/docs/main/quantization))
+- compare 10M, 20M, and larger models within Mac memory limits
+- publish plots from `artifacts/metrics.json` and the evaluation reports
+
+
+===== docs/roadmap.md =====
+
+# Roadmap
+
+## Milestone 1 — foundations
+
+- [x] repository structure and local-first configuration
+- [x] decoder-only Transformer forward pass
+- [x] causal masking and next-token loss
+- [x] deterministic tests for shapes and causality
+- [x] byte-level tokenizer and text dataset
+
+## Milestone 2 — training
+
+- [x] gradient accumulation
+- [x] checkpoint save/resume with optimizer state
+- [x] validation loss and perplexity
+- [x] first small English corpus experiment
+
+## Milestone 3 — inference
+
+- [x] temperature, top-k, and top-p sampling
+- [x] KV cache with full-forward equivalence tests
+- [x] latency benchmark with JSON output
+
+## Milestone 4 — research-quality comparisons
+
+- [x] learned positions versus RoPE
+- [ ] AdamW versus SGD
+- [ ] context lengths 128/256/512
+- [ ] model-size scaling
+- [x] LoRA building block
+- [x] quantization experiment utility
+- [ ] full fine-tuning versus LoRA quality comparison
+
+Every experiment should have a configuration, a fixed seed, recorded metrics, and a short written conclusion.
+
+
+===== src/minilm_lab/data.py =====
+
+from pathlib import Path
+
+import torch
+from torch import Tensor
+
+
+def load_text(path: str | Path) -> str:
+    return Path(path).read_text(encoding="utf-8")
+
+
+def split_tokens(tokens: Tensor, validation_fraction: float = 0.1) -> tuple[Tensor, Tensor]:
+    split = int(tokens.numel() * (1.0 - validation_fraction))
+    if split <= 1 or tokens.numel() - split <= 1:
+        raise ValueError("text must contain enough tokens for a train/validation split")
+    return tokens[:split], tokens[split:]
+
+
+def make_batch(tokens: Tensor, batch_size: int, context_length: int, device: str) -> tuple[Tensor, Tensor]:
+    starts = torch.randint(0, tokens.numel() - context_length - 1, (batch_size,))
+    x = torch.stack([tokens[i : i + context_length] for i in starts])
+    y = torch.stack([tokens[i + 1 : i + context_length + 1] for i in starts])
+    return x.to(device), y.to(device)
+
+
+===== src/minilm_lab/generation.py =====
+
+import torch
+
+from .tokenizer import ByteTokenizer
+
+
+@torch.no_grad()
+def generate(model, prompt: str, tokenizer: ByteTokenizer, max_new_tokens: int = 80, temperature: float = 0.8, top_k: int | None = 40, top_p: float = 1.0) -> str:
+    model.eval()
+    device = next(model.parameters()).device
+    tokens = torch.tensor([tokenizer.encode(prompt)], dtype=torch.long, device=device)
+    for _ in range(max_new_tokens):
+        context = tokens[:, -model.config.context_length :]
+        logits, _ = model(context)
+        logits = logits[:, -1, :] / max(temperature, 1e-6)
+        if top_k is not None:
+            values, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+            logits[logits < values[:, [-1]]] = float("-inf")
+        if top_p < 1.0:
+            sorted_logits, sorted_indices = torch.sort(logits, descending=True)
+            cumulative = torch.cumsum(torch.softmax(sorted_logits, dim=-1), dim=-1)
+            remove = cumulative > top_p
+            remove[:, 1:] = remove[:, :-1].clone()
+            remove[:, 0] = False
+            logits.scatter_(1, sorted_indices, sorted_logits.masked_fill(remove, float("-inf")))
+        probabilities = torch.softmax(logits, dim=-1)
+        next_token = torch.multinomial(probabilities, 1)
+        tokens = torch.cat((tokens, next_token), dim=1)
+    return tokenizer.decode(tokens[0].tolist())
+
+
+===== src/minilm_lab/kv_cache.py =====
+
+import torch
+
+from .tokenizer import ByteTokenizer
+
+
+@torch.no_grad()
+def generate_with_kv_cache(model, prompt: str, tokenizer: ByteTokenizer, max_new_tokens: int = 80, temperature: float = 0.8) -> str:
+    model.eval()
+    device = next(model.parameters()).device
+    tokens = torch.tensor([tokenizer.encode(prompt)], dtype=torch.long, device=device)
+    logits, cache = model.forward_cached(tokens[:, -model.config.context_length :])
+    for _ in range(max_new_tokens):
+        probabilities = torch.softmax(logits[:, -1, :] / max(temperature, 1e-6), dim=-1)
+        next_token = torch.multinomial(probabilities, 1)
+        tokens = torch.cat((tokens, next_token), dim=1)
+        if tokens.size(1) > model.config.context_length:
+            # Rebuild the cache from the active sliding window. This keeps
+            # long generation requests valid while bounding memory.
+            logits, cache = model.forward_cached(tokens[:, -model.config.context_length :])
+        else:
+            logits, cache = model.forward_cached(next_token, cache)
+    return tokenizer.decode(tokens[0].tolist())
+
+
+===== src/minilm_lab/lora.py =====
+
+"""A minimal LoRA wrapper for parameter-efficient experiments."""
+
+from torch import Tensor, nn
+
+
+class LoRALinear(nn.Module):
+    def __init__(self, base: nn.Linear, rank: int = 4, alpha: float = 1.0) -> None:
+        super().__init__()
+        self.base = base
+        self.base.weight.requires_grad_(False)
+        if self.base.bias is not None:
+            self.base.bias.requires_grad_(False)
+        self.down = nn.Linear(base.in_features, rank, bias=False)
+        self.up = nn.Linear(rank, base.out_features, bias=False)
+        nn.init.kaiming_uniform_(self.down.weight, a=5**0.5)
+        nn.init.zeros_(self.up.weight)
+        self.scale = alpha / rank
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.base(x) + self.scale * self.up(self.down(x))
+
+
+def trainable_parameter_count(model: nn.Module) -> int:
+    return sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad)
+
+
+===== src/minilm_lab/model.py =====
+
+"""A compact decoder-only Transformer with explicit systems-oriented components."""
+
+from dataclasses import dataclass
+
+import torch
+import torch.nn.functional as F
+from torch import Tensor, nn
+
+
+@dataclass
+class MiniLMConfig:
+    vocab_size: int = 256
+    context_length: int = 128
+    embedding_dim: int = 192
+    num_layers: int = 4
+    num_heads: int = 6
+    dropout: float = 0.0
+    positional_encoding: str = "learned"
+    norm: str = "rmsnorm"
+    activation: str = "swiglu"
+    rope_theta: float = 10000.0
+
+
+class RMSNorm(nn.Module):
+    """Root-mean-square normalization used by many modern decoder LMs."""
+
+    def __init__(self, dimension: int, eps: float = 1e-6) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(dimension))
+        self.eps = eps
+
+    def forward(self, x: Tensor) -> Tensor:
+        variance = x.float().pow(2).mean(dim=-1, keepdim=True)
+        return x * torch.rsqrt(variance + self.eps).to(dtype=x.dtype) * self.weight
+
+
+class CausalSelfAttention(nn.Module):
+    def __init__(self, config: MiniLMConfig) -> None:
+        super().__init__()
+        self.rope_theta = config.rope_theta
+        self.attention = nn.MultiheadAttention(
+            config.embedding_dim, config.num_heads, config.dropout, batch_first=True
+        )
+        self.register_buffer(
+            "mask", torch.triu(torch.ones(config.context_length, config.context_length), diagonal=1).bool()
+        )
+
+    def forward_cached(
+        self,
+        x: Tensor,
+        past: tuple[Tensor, Tensor] | None = None,
+        use_rope: bool = False,
+        position_offset: int = 0,
+    ) -> tuple[Tensor, tuple[Tensor, Tensor]]:
+        batch, length, _ = x.shape
+        heads = self.attention.num_heads
+        width = x.size(-1) // heads
+        qkv = F.linear(x, self.attention.in_proj_weight, self.attention.in_proj_bias)
+        q, k, v = qkv.chunk(3, dim=-1)
+        q = q.reshape(batch, length, heads, width).transpose(1, 2)
+        k = k.reshape(batch, length, heads, width).transpose(1, 2)
+        v = v.reshape(batch, length, heads, width).transpose(1, 2)
+        if use_rope:
+            q = self._apply_rope(q, position_offset)
+            k = self._apply_rope(k, position_offset)
+        if past is not None:
+            k = torch.cat((past[0], k), dim=2)
+            v = torch.cat((past[1], v), dim=2)
+        # With a cache, every new query is after all cached keys. PyTorch's
+        # non-square is_causal mask is upper-left aligned, so it would hide
+        # valid history; an explicit all-visible call is correct here.
+        output = F.scaled_dot_product_attention(q, k, v, is_causal=past is None)
+        output = output.transpose(1, 2).reshape(batch, length, -1)
+        return self.attention.out_proj(output), (k, v)
+    def _apply_rope(self, x: Tensor, position_offset: int = 0) -> Tensor:
+        length = x.size(2)
+        half = x.size(-1) // 2
+        positions = torch.arange(position_offset, position_offset + length, device=x.device, dtype=x.dtype)
+        frequencies = 1.0 / (self.rope_theta ** (torch.arange(half, device=x.device, dtype=x.dtype) / half))
+        angles = positions[:, None] * frequencies[None, :]
+        cos, sin = angles.cos()[None, None, :, :], angles.sin()[None, None, :, :]
+        first, second = x[..., :half], x[..., half : 2 * half]
+        rotated = torch.cat((first * cos - second * sin, first * sin + second * cos), dim=-1)
+        return torch.cat((rotated, x[..., 2 * half :]), dim=-1)
+
+    def forward(self, x: Tensor, use_rope: bool = False) -> Tensor:
+        length = x.size(1)
+        if use_rope:
+            # This path is kept explicit for the ablation; PyTorch's attention
+            # still handles masking and optimized kernels.
+            qkv = F.linear(x, self.attention.in_proj_weight, self.attention.in_proj_bias)
+            q, k, v = qkv.chunk(3, dim=-1)
+            heads = self.attention.num_heads
+            width = x.size(-1) // heads
+            q = self._apply_rope(q.reshape(x.size(0), length, heads, width).transpose(1, 2))
+            k = self._apply_rope(k.reshape(x.size(0), length, heads, width).transpose(1, 2))
+            v = v.reshape(x.size(0), length, heads, width).transpose(1, 2)
+            output = torch.nn.functional.scaled_dot_product_attention(q, k, v, is_causal=True).transpose(1, 2).reshape(x.size(0), length, -1)
+            output = self.attention.out_proj(output)
+        else:
+            output, _ = self.attention(x, x, x, attn_mask=self.mask[:length, :length], need_weights=False)
+        return output
+
+
+class TransformerBlock(nn.Module):
+    def __init__(self, config: MiniLMConfig) -> None:
+        super().__init__()
+        norm = RMSNorm if config.norm == "rmsnorm" else nn.LayerNorm
+        self.norm1 = norm(config.embedding_dim)
+        self.attention = CausalSelfAttention(config)
+        self.norm2 = norm(config.embedding_dim)
+        hidden = 4 * config.embedding_dim
+        self.activation = config.activation
+        if config.activation == "swiglu":
+            self.gate = nn.Linear(config.embedding_dim, hidden)
+            self.up = nn.Linear(config.embedding_dim, hidden)
+            self.down = nn.Linear(hidden, config.embedding_dim)
+        else:
+            self.feed_forward = nn.Sequential(
+                nn.Linear(config.embedding_dim, hidden), nn.GELU(),
+                nn.Linear(hidden, config.embedding_dim), nn.Dropout(config.dropout)
+            )
+
+    def forward(self, x: Tensor, use_rope: bool = False) -> Tensor:
+        x = x + self.attention(self.norm1(x), use_rope=use_rope)
+        normalized = self.norm2(x)
+        if self.activation == "swiglu":
+            feed_forward = F.silu(self.gate(normalized)) * self.up(normalized)
+            feed_forward = self.down(feed_forward)
+        else:
+            feed_forward = self.feed_forward(normalized)
+        return x + feed_forward
+
+    def forward_cached(self, x: Tensor, past=None, use_rope: bool = False, position_offset: int = 0):
+        attended, current = self.attention.forward_cached(self.norm1(x), past, use_rope, position_offset)
+        x = x + attended
+        normalized = self.norm2(x)
+        if self.activation == "swiglu":
+            feed_forward = F.silu(self.gate(normalized)) * self.up(normalized)
+            feed_forward = self.down(feed_forward)
+        else:
+            feed_forward = self.feed_forward(normalized)
+        return x + feed_forward, current
+
+
+class MiniLM(nn.Module):
+    def __init__(self, config: MiniLMConfig | None = None) -> None:
+        super().__init__()
+        self.config = config or MiniLMConfig()
+        c = self.config
+        self.token_embedding = nn.Embedding(c.vocab_size, c.embedding_dim)
+        self.position_embedding = nn.Embedding(c.context_length, c.embedding_dim)
+        self.blocks = nn.ModuleList([TransformerBlock(c) for _ in range(c.num_layers)])
+        self.final_norm = RMSNorm(c.embedding_dim) if c.norm == "rmsnorm" else nn.LayerNorm(c.embedding_dim)
+        self.lm_head = nn.Linear(c.embedding_dim, c.vocab_size, bias=False)
+        self.lm_head.weight = self.token_embedding.weight
+
+    def forward(self, input_ids: Tensor, targets: Tensor | None = None) -> tuple[Tensor, Tensor | None]:
+        _, length = input_ids.shape
+        if length > self.config.context_length:
+            raise ValueError("input sequence is longer than context_length")
+        positions = torch.arange(length, device=input_ids.device)
+        x = self.token_embedding(input_ids)
+        if self.config.positional_encoding == "learned":
+            x = x + self.position_embedding(positions)
+        for block in self.blocks:
+            x = block(x, use_rope=self.config.positional_encoding == "rope")
+        logits = self.lm_head(self.final_norm(x))
+        loss = None
+        if targets is not None:
+            loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), targets.reshape(-1))
+        return logits, loss
+
+    @torch.no_grad()
+    def forward_cached(self, input_ids: Tensor, cache=None):
+        past_length = 0 if cache is None else cache[0][0].size(2)
+        if past_length + input_ids.size(1) > self.config.context_length:
+            raise ValueError("cached sequence exceeds context_length")
+        positions = torch.arange(past_length, past_length + input_ids.size(1), device=input_ids.device)
+        x = self.token_embedding(input_ids)
+        if self.config.positional_encoding == "learned":
+            x = x + self.position_embedding(positions)
+        next_cache = []
+        for index, block in enumerate(self.blocks):
+            x, layer_cache = block.forward_cached(
+                x,
+                None if cache is None else cache[index],
+                use_rope=self.config.positional_encoding == "rope",
+                position_offset=past_length,
+            )
+            next_cache.append(layer_cache)
+        return self.lm_head(self.final_norm(x)), next_cache
+
+
+===== src/minilm_lab/tokenizer.py =====
+
+"""Small, dependency-free byte and BPE tokenizers for reproducible experiments."""
+
+import json
+import re
+from collections import Counter
+from itertools import pairwise
+from pathlib import Path
+
+
+class ByteTokenizer:
+    vocab_size = 256
+
+    def encode(self, text: str) -> list[int]:
+        return list(text.encode("utf-8"))
+
+    def decode(self, tokens: list[int]) -> str:
+        return bytes(tokens).decode("utf-8", errors="replace")
+
+
+class BPETokenizer:
+    def __init__(self, merges: list[tuple[int, int]] | None = None) -> None:
+        self.merges = merges or []
+        self.ranks = {pair: rank for rank, pair in enumerate(self.merges)}
+        self.vocab_size = 256 + len(self.merges)
+
+    @classmethod
+    def train(cls, text: str, vocab_size: int = 512) -> "BPETokenizer":
+        if vocab_size < 256:
+            raise ValueError("vocab_size must be at least 256")
+        sequences = [list(chunk.encode("utf-8")) for chunk in text.splitlines(True)]
+        merges = []
+        for _ in range(vocab_size - 256):
+            counts = Counter(pair for sequence in sequences for pair in pairwise(sequence))
+            if not counts:
+                break
+            pair, _ = counts.most_common(1)[0]
+            new_id = 256 + len(merges)
+            merges.append(pair)
+            updated = []
+            for sequence in sequences:
+                result = []
+                index = 0
+                while index < len(sequence):
+                    if index + 1 < len(sequence) and (sequence[index], sequence[index + 1]) == pair:
+                        result.append(new_id)
+                        index += 2
+                    else:
+                        result.append(sequence[index])
+                        index += 1
+                updated.append(result)
+            sequences = updated
+        return cls(merges)
+
+    def encode(self, text: str) -> list[int]:
+        # Encode repeated words/punctuation independently and cache them. This
+        # avoids repeatedly scanning the entire corpus during preprocessing.
+        parts = re.findall(r"\s+|[^\W_]+|[^\w\s]", text, flags=re.UNICODE)
+        cache: dict[bytes, tuple[int, ...]] = {}
+        encoded = []
+        for part in parts:
+            raw = part.encode("utf-8")
+            if raw not in cache:
+                cache[raw] = self._encode_bytes(raw)
+            encoded.extend(cache[raw])
+        return encoded
+
+    def _encode_bytes(self, raw: bytes) -> tuple[int, ...]:
+        tokens = list(raw)
+        while len(tokens) > 1:
+            candidates = [(self.ranks[(tokens[i], tokens[i + 1])], i) for i in range(len(tokens) - 1) if (tokens[i], tokens[i + 1]) in self.ranks]
+            if not candidates:
+                break
+            _, index = min(candidates)
+            pair = (tokens[index], tokens[index + 1])
+            tokens[index : index + 2] = [256 + self.ranks[pair]]
+        return tuple(tokens)
+
+    def decode(self, tokens: list[int]) -> str:
+        def expand(token: int) -> list[int]:
+            if token < 256:
+                return [token]
+            left, right = self.merges[token - 256]
+            return expand(left) + expand(right)
+
+        byte_values = [byte for token in tokens for byte in expand(token)]
+        return bytes(byte_values).decode("utf-8", errors="replace")
+
+    def save(self, path: str | Path) -> None:
+        Path(path).write_text(json.dumps(self.merges), encoding="utf-8")
+
+    @classmethod
+    def load(cls, path: str | Path) -> "BPETokenizer":
+        return cls([tuple(pair) for pair in json.loads(Path(path).read_text(encoding="utf-8"))])
+

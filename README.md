@@ -17,6 +17,8 @@ MiniLM Lab is a local-first ML systems laboratory. It implements the path from b
 
 ![MiniLM Lab architecture](docs/figures/architecture.svg)
 
+![MiniLM Systems corpus training curves](docs/figures/training-curves.svg)
+
 ## What is implemented
 
 ```text
@@ -77,7 +79,7 @@ configs/          small reproducible configurations
 
 ## Results and interpretation
 
-The checked-in dashboard contains the current 1,000-step baseline for the upgraded RMSNorm + SwiGLU architecture. The run was validated on CPU; rerun on Apple Silicon MPS for hardware-specific throughput. Token-level perplexity cannot be compared directly across different vocabularies; use bits per byte and matched-budget qualitative samples as complementary evidence.
+The checked-in dashboard contains the current 1,000-step comparison between the new MiniLM Systems corpus and the original Tiny Shakespeare baseline. The upgraded RMSNorm + SwiGLU architecture was validated on CPU; rerun on Apple Silicon MPS for hardware-specific throughput. Token-level perplexity cannot be compared directly across different vocabularies or corpora; use full-split evaluation, bits per byte, and matched-budget qualitative samples as complementary evidence.
 
 The benchmark data is tracked at [docs/data/experiment_summary.json](docs/data/experiment_summary.json), and the figures are regenerated with:
 

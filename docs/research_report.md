@@ -2,7 +2,7 @@
 
 **Author:** Anvit Devadiga  
 **Status:** Reproducible baseline and systems experiments  
-**Hardware:** Apple Silicon MacBook Air using PyTorch MPS when available
+**Hardware:** validated on CPU; designed for Apple Silicon MacBook Air using PyTorch MPS when available
 
 ## Abstract
 
@@ -31,11 +31,11 @@ Supported components include:
 
 ```bash
 source .venv/bin/activate
-python scripts/train_tokenizer.py data/tinyshakespeare.txt --vocab-size 512 --output artifacts/bpe.json
-python scripts/train_tiny.py data/tinyshakespeare.txt --steps 10000 --eval-interval 250
-python scripts/evaluate.py data/tinyshakespeare.txt --checkpoint artifacts/best_checkpoint.pt
-python scripts/generate.py "To be or not to be" --checkpoint artifacts/best_checkpoint.pt --tokens 200 --top-k 40 --top-p 0.95
-python scripts/benchmark_generation.py --checkpoint artifacts/best_checkpoint.pt --tokens 200
+python scripts/build_corpus.py
+python scripts/train_tiny.py data/minilm_systems.txt --steps 1000 --eval-interval 100 --gradient-accumulation-steps 4
+python scripts/evaluate.py data/minilm_systems.txt --checkpoint artifacts/best_checkpoint.pt
+python scripts/generate.py "MiniLM systems" --checkpoint artifacts/best_checkpoint.pt --tokens 128 --top-k 40 --top-p 0.95
+python scripts/benchmark_kv_cache.py --checkpoint artifacts/best_checkpoint.pt --tokens 128 --output artifacts/kv-cache.json
 ```
 
 ## Results
@@ -44,30 +44,31 @@ The current numbers below use the upgraded RMSNorm/SwiGLU architecture, a fixed 
 
 The preserved experiment summary is tracked in [experiment_summary.json](data/experiment_summary.json), with the publication-style comparison in [results-dashboard.svg](figures/results-dashboard.svg). Regenerate the figures with `make assets` after changing the data.
 
-### Byte-level baseline
+### MiniLM Systems corpus
 
-Using the Tiny Shakespeare corpus and 10,000 training steps:
+Using the repository's documentation and implementation corpus, byte tokenization, and 1,000 training steps:
+
+- best logged validation perplexity: **12.30**
+- full-split validation perplexity: **16.67**
+- bits per byte: **4.0593**
+- generation throughput: **707.55 tokens/second** on the CPU validation run
+- KV-cache speedup: **2.67×** for 128 generated tokens
+
+### Tiny Shakespeare comparison
+
+Using the original corpus, byte tokenization, the same model shape, and the same training budget:
 
 - best logged validation perplexity: **14.98**
 - full-split validation perplexity: **15.36**
+- bits per byte: **3.9413**
 - generation throughput: **715.84 tokens/second** on the CPU validation run
 - KV-cache speedup: **2.74×** for 128 generated tokens
 
-### BPE experiment
-
-Using the same corpus, model shape, and training budget with a learned 512-token BPE vocabulary:
-
-- best logged validation perplexity: **43.78**
-- full-split evaluation perplexity: **40.70**
-- full-split bits per byte: **3.8444**
-- generation throughput: **736.40 tokens/second** on the CPU validation run
-- KV-cache speedup: **2.73×** for 128 generated tokens
-
-Raw perplexity across tokenizers must not be treated as a direct quality ranking because the token units differ. Bits per byte and qualitative generation are more appropriate cross-tokenizer comparisons. The BPE model produced more recognisable word and dialogue structure in qualitative samples, while the byte model achieved lower token-level perplexity.
+The systems corpus is a focused domain-adaptation demonstration, not a broad-language benchmark. Its lower best-step loss shows the model can learn repository-specific terminology and structure. Full-split evaluation is the more conservative measure because the validation sample is small.
 
 ## Engineering findings
 
-1. A tiny byte-level Transformer can learn strong corpus-specific character and formatting patterns on Apple MPS.
+1. A tiny byte-level Transformer can learn strong corpus-specific terminology and formatting patterns from a focused technical corpus.
 2. Validation metrics fluctuate across stochastic batches, so full-split evaluation is more reliable than a single printed validation batch.
 3. BPE preprocessing must be implemented with care: a naive repeated full-corpus merge scan was unacceptably slow, while cached chunk encoding reduced preprocessing to well under a second for this corpus.
 4. Best-checkpoint selection matters because the final training step is not always the best validation step.
@@ -75,7 +76,7 @@ Raw perplexity across tokenizers must not be treated as a direct quality ranking
 
 ## Limitations
 
-This is an educational and research baseline, not a general-purpose assistant. Tiny Shakespeare is a small, narrow corpus; the model is not expected to produce reliable factual answers or broad English knowledge. The current LoRA and quantization components are experiment utilities and require dedicated end-to-end benchmark runs before strong conclusions can be made. Cross-tokenizer comparisons require additional normalization and should not rely on perplexity alone.
+This is an educational and research baseline, not a general-purpose assistant. The MiniLM Systems corpus is intentionally narrow and assembled from this repository; it is not evidence of broad language knowledge. The current LoRA and quantization components are experiment utilities and require dedicated end-to-end benchmark runs before strong conclusions can be made.
 
 ## Next experiments
 
