@@ -1,0 +1,25 @@
+{
+  "split_method": "first approximately 90% of bytes at a paragraph boundary from each document for training; remainder for validation",
+  "sources": [
+    {
+      "name": "darwin-1859",
+      "url": "https://www.gutenberg.org/cache/epub/1228/pg1228.txt",
+      "raw_sha256": "ededa9c0bf8761efed092c303b46c1c92de956838cba6249a33bedfd6d7363b4",
+      "paragraphs": 1322,
+      "train_paragraphs": 701,
+      "validation_bytes": 93406
+    },
+    {
+      "name": "einstein-1924",
+      "url": "https://www.gutenberg.org/cache/epub/30155/pg30155.txt",
+      "raw_sha256": "86ed8156239455cbb6ed33e06097707d3ab7c40d46e9aa5ff32d3c3f94ef68fd",
+      "paragraphs": 564,
+      "train_paragraphs": 490,
+      "validation_bytes": 18704
+    }
+  ],
+  "train_bytes": 1008977,
+  "validation_bytes": 112112,
+  "train_sha256": "19c057053f222c3084fba3693c1c295ea94f6cda1ee5fbf5f917953fcb91ef00",
+  "validation_sha256": "e25d4e45706bbf4251129dbb079f3487660c453cf8b34407901350538b23e2e7"
+}

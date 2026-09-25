@@ -27,11 +27,11 @@ def test_kv_cache_matches_full_forward() -> None:
         )
         model = MiniLM(config).eval()
         prompt = torch.randint(0, 32, (1, 6))
-        continuation = torch.randint(0, 32, (1, 1))
+        continuation = torch.randint(0, 32, (1, 3))
         full_logits, _ = model(torch.cat((prompt, continuation), dim=1))
         _, cache = model.forward_cached(prompt)
         cached_logits, _ = model.forward_cached(continuation, cache)
-        assert torch.allclose(full_logits[:, -1], cached_logits[:, -1], atol=1e-5, rtol=1e-5)
+        assert torch.allclose(full_logits[:, -3:], cached_logits, atol=1e-5, rtol=1e-5)
 
 
 def test_kv_cache_context_limit_is_enforced() -> None:

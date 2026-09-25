@@ -1,32 +1,20 @@
-# Implementation audit
+# Implementation audit · September 2026
 
-## Baseline audit
+## Corrected defects
 
-The original repository had the right breadth but several claims were ahead of the evidence. The most important gaps were correctness and reproducibility, not missing prose.
-
-| Finding | Impact | Resolution |
+| Defect | Consequence | Fix |
 | --- | --- | --- |
-| Cached attention reshaped projected tensors twice | cached logits diverged from full forward | fixed tensor layout and added equivalence tests |
-| Cached blocks skipped the MLP sublayer | generation used a different model than training | cache path now runs the complete block |
-| RoPE was not applied in cached decoding | RoPE experiments were invalid during generation | cache path now applies the absolute position offset |
-| Cache could silently run past the context window | invalid position/cache state | explicit context-limit error |
-| Architecture was LayerNorm + GELU only | did not match the stated modern decoder design | RMSNorm + SwiGLU are now the default; legacy options remain |
-| Benchmarks only printed terminal text | results were hard to reproduce or plot | benchmark JSON output added |
-| Resume loaded after training | `--resume` did not resume the run | retained as a follow-up item until optimizer-state checkpoints are added |
+| Training documentation counted microbatches as steps | Compute budget was misleading | Each step now performs a full optimizer update after the configured number of microbatches |
+| Best checkpoint used one random validation batch | Checkpoint choice varied with RNG | Full held-out split is scored at every checkpoint |
+| Bits per byte used the entire input corpus as denominator | Reported quality was wrong | Only scored held-out bytes are counted |
+| Evaluation skipped tail targets | Incomplete validation | Every next token is scored once |
+| Cache with multi-token continuation exposed future keys | Causal leak | Explicit offset-aligned attention mask and regression test |
+| Cache decode performed a forward pass after the final token | Inflated cache latency | Final pass removed |
+| Cache benchmark used different sampling filters | Speedup was not an equal comparison | Same sampler settings, warm-up, seven repeats, raw timings |
+| Dynamic INT8 command crashed with `NoQEngine` | Advertised feature did not run | Portable weight-only INT8 reference with quality, storage, and latency measurements |
+| Repo-derived corpus mixed the model's own code and report | Weak external validity and unstable source | Two cited public-domain science books, per-book held-out paragraphs, SHA-256 manifest |
+| README SVG labels collided and mixed unrelated corpus/tokenizer claims | Visually and scientifically misleading | Paper-style plots from a single measured run, rendered and inspected |
 
-## Verification status
+## Remaining limits
 
-The local project environment passes 12 tests. The key invariant is:
-
-```text
-full forward(prompt + token)[-1] == cached forward(prompt) → cached forward(token)[-1]
-```
-
-This is tested for both learned positional embeddings and RoPE. Exact throughput and quality numbers remain hardware- and seed-dependent; they must be regenerated after architecture changes.
-
-## Honest limitations
-
-- The bundled corpus is intentionally small and narrow.
-- The BPE trainer is educational, not a production tokenizer.
-- Dynamic INT8 is a CPU comparison utility. PyTorch is migrating quantization work toward torchao; the old API should not be presented as a production deployment path.
-- MPS mixed precision should be benchmarked on the target machine rather than assumed. See the [PyTorch MPS notes](https://docs.pytorch.org/docs/main/notes/mps.html).
+The model still delegates multi-head attention, tensor operations and differentiation to PyTorch. BPE and LoRA are building blocks without a matched comparison here. One seed, one small corpus, one CPU environment, and a 128-token context do not establish state-of-the-art quality. The next rigorous steps are a truly unseen-book test, multiple seeds, M4 MPS measurements, and a matched RoPE ablation.

@@ -66,10 +66,16 @@ class CausalSelfAttention(nn.Module):
         if past is not None:
             k = torch.cat((past[0], k), dim=2)
             v = torch.cat((past[1], v), dim=2)
-        # With a cache, every new query is after all cached keys. PyTorch's
-        # non-square is_causal mask is upper-left aligned, so it would hide
-        # valid history; an explicit all-visible call is correct here.
-        output = F.scaled_dot_product_attention(q, k, v, is_causal=past is None)
+        if past is None:
+            output = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+        else:
+            # Non-square is_causal is upper-left aligned in PyTorch. Align
+            # each query with its absolute position in the concatenated keys.
+            past_length = past[0].size(2)
+            key_positions = torch.arange(k.size(2), device=x.device)
+            query_positions = past_length + torch.arange(length, device=x.device)
+            mask = key_positions[None, :] <= query_positions[:, None]
+            output = F.scaled_dot_product_attention(q, k, v, attn_mask=mask)
         output = output.transpose(1, 2).reshape(batch, length, -1)
         return self.attention.out_proj(output), (k, v)
     def _apply_rope(self, x: Tensor, position_offset: int = 0) -> Tensor:
@@ -148,12 +154,17 @@ class MiniLM(nn.Module):
         super().__init__()
         self.config = config or MiniLMConfig()
         c = self.config
+        if c.embedding_dim % c.num_heads:
+            raise ValueError("embedding_dim must be divisible by num_heads")
+        if c.positional_encoding not in {"learned", "rope"} or c.norm not in {"rmsnorm", "layernorm"} or c.activation not in {"swiglu", "gelu"}:
+            raise ValueError("unsupported model configuration")
         self.token_embedding = nn.Embedding(c.vocab_size, c.embedding_dim)
         self.position_embedding = nn.Embedding(c.context_length, c.embedding_dim)
         self.blocks = nn.ModuleList([TransformerBlock(c) for _ in range(c.num_layers)])
         self.final_norm = RMSNorm(c.embedding_dim) if c.norm == "rmsnorm" else nn.LayerNorm(c.embedding_dim)
         self.lm_head = nn.Linear(c.embedding_dim, c.vocab_size, bias=False)
         self.lm_head.weight = self.token_embedding.weight
+        nn.init.normal_(self.token_embedding.weight, mean=0.0, std=0.02)
 
     def forward(self, input_ids: Tensor, targets: Tensor | None = None) -> tuple[Tensor, Tensor | None]:
         _, length = input_ids.shape

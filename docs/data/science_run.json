@@ -1,0 +1,157 @@
+{
+  "name": "Public-domain science prose",
+  "seed": 42,
+  "torch_version": "2.14.0",
+  "config": {
+    "vocab_size": 256,
+    "context_length": 128,
+    "embedding_dim": 192,
+    "num_layers": 4,
+    "num_heads": 6,
+    "dropout": 0.0,
+    "positional_encoding": "learned",
+    "norm": "rmsnorm",
+    "activation": "swiglu",
+    "rope_theta": 10000.0
+  },
+  "corpus": {
+    "split_method": "first approximately 90% of bytes at a paragraph boundary from each document for training; remainder for validation",
+    "sources": [
+      {
+        "name": "darwin-1859",
+        "url": "https://www.gutenberg.org/cache/epub/1228/pg1228.txt",
+        "raw_sha256": "ededa9c0bf8761efed092c303b46c1c92de956838cba6249a33bedfd6d7363b4",
+        "paragraphs": 1322,
+        "train_paragraphs": 701,
+        "validation_bytes": 93406
+      },
+      {
+        "name": "einstein-1924",
+        "url": "https://www.gutenberg.org/cache/epub/30155/pg30155.txt",
+        "raw_sha256": "86ed8156239455cbb6ed33e06097707d3ab7c40d46e9aa5ff32d3c3f94ef68fd",
+        "paragraphs": 564,
+        "train_paragraphs": 490,
+        "validation_bytes": 18704
+      }
+    ],
+    "train_bytes": 1008977,
+    "validation_bytes": 112112,
+    "train_sha256": "19c057053f222c3084fba3693c1c295ea94f6cda1ee5fbf5f917953fcb91ef00",
+    "validation_sha256": "e25d4e45706bbf4251129dbb079f3487660c453cf8b34407901350538b23e2e7"
+  },
+  "metrics": [
+    {
+      "step": 250,
+      "train_loss": 3.0327484011650085,
+      "validation_loss": 3.275113352777709,
+      "perplexity": 26.446223063511567,
+      "bits_per_token": 4.724989792401627,
+      "validation_tokens": 112111,
+      "elapsed_seconds": 27.789715874998365
+    },
+    {
+      "step": 500,
+      "train_loss": 3.0437499284744263,
+      "validation_loss": 3.279687989213292,
+      "perplexity": 26.567482065577426,
+      "bits_per_token": 4.731589597701113,
+      "validation_tokens": 112111,
+      "elapsed_seconds": 56.17977279200568
+    },
+    {
+      "step": 750,
+      "train_loss": 3.058131754398346,
+      "validation_loss": 3.273437816850808,
+      "perplexity": 26.401948568749216,
+      "bits_per_token": 4.7225725050290555,
+      "validation_tokens": 112111,
+      "elapsed_seconds": 84.26185200001055
+    },
+    {
+      "step": 1000,
+      "train_loss": 2.6655086278915405,
+      "validation_loss": 2.866917291863034,
+      "perplexity": 17.582732137354572,
+      "bits_per_token": 4.136087359609617,
+      "validation_tokens": 112111,
+      "elapsed_seconds": 112.53946058401198
+    }
+  ],
+  "evaluation": {
+    "checkpoint": "artifacts/runs/science-v2/best_checkpoint.pt",
+    "tokenizer": "byte",
+    "device": "cpu",
+    "validation_loss": 2.866917291863034,
+    "perplexity": 17.582732137354572,
+    "bits_per_token": 4.136087359609617,
+    "validation_tokens": 112111,
+    "bits_per_byte": 4.136087359609617,
+    "validation_bytes": 112111
+  },
+  "per_source_evaluation": {
+    "darwin-1859": {
+      "checkpoint": "artifacts/runs/science-v2/best_checkpoint.pt",
+      "tokenizer": "byte",
+      "device": "cpu",
+      "validation_loss": 2.876895572386068,
+      "perplexity": 17.759055811538698,
+      "bits_per_token": 4.1504829754367965,
+      "validation_tokens": 93405,
+      "bits_per_byte": 4.1504829754367965,
+      "validation_bytes": 93405
+    },
+    "einstein-1924": {
+      "checkpoint": "artifacts/runs/science-v2/best_checkpoint.pt",
+      "tokenizer": "byte",
+      "device": "cpu",
+      "validation_loss": 2.813936498976771,
+      "perplexity": 16.675432007740543,
+      "bits_per_token": 4.059652232450239,
+      "validation_tokens": 18703,
+      "bits_per_byte": 4.059652232450239,
+      "validation_bytes": 18703
+    }
+  },
+  "benchmark": {
+    "device": "cpu",
+    "generated_tokens": 96,
+    "repeats": 7,
+    "warmup_runs_per_mode": 1,
+    "prompt_tokens": 21,
+    "uncached_seconds_samples": [
+      0.11937845799548086,
+      0.12014191699563526,
+      0.12401966701145284,
+      0.11941945798753295,
+      0.11942629200348165,
+      0.11928658300894313,
+      0.11963204199855682
+    ],
+    "cached_seconds_samples": [
+      0.03340008399391081,
+      0.03337929100962356,
+      0.03378612500091549,
+      0.03344170800119173,
+      0.03324800000700634,
+      0.033338291992549784,
+      0.03349700001126621
+    ],
+    "uncached_seconds": 0.11942629200348165,
+    "cached_seconds": 0.03340008399391081,
+    "uncached_tokens_per_second": 803.8430934220188,
+    "cached_tokens_per_second": 2874.2442688917135,
+    "speedup": 3.575628493187452
+  },
+  "quantization": {
+    "method": "per-output-channel symmetric INT8 linear weights; dequantize on each forward pass",
+    "scope": "MLP nn.Linear layers; attention projections and tied LM head remain FP32",
+    "device": "cpu",
+    "original_validation_loss": 2.866917291863034,
+    "int8_validation_loss": 2.867066869126566,
+    "loss_delta": 0.00014957726353204137,
+    "original_stored_bytes": 9844480,
+    "int8_stored_bytes": 4563712,
+    "original_32_forward_seconds": 0.055598207996808924,
+    "int8_32_forward_seconds": 0.06593408300250303
+  }
+}

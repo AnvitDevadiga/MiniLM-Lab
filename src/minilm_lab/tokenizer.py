@@ -14,7 +14,10 @@ class ByteTokenizer:
         return list(text.encode("utf-8"))
 
     def decode(self, tokens: list[int]) -> str:
-        return bytes(tokens).decode("utf-8", errors="replace")
+        return self.decode_bytes(tokens).decode("utf-8", errors="replace")
+
+    def decode_bytes(self, tokens: list[int]) -> bytes:
+        return bytes(tokens)
 
 
 class BPETokenizer:
@@ -76,6 +79,9 @@ class BPETokenizer:
         return tuple(tokens)
 
     def decode(self, tokens: list[int]) -> str:
+        return self.decode_bytes(tokens).decode("utf-8", errors="replace")
+
+    def decode_bytes(self, tokens: list[int]) -> bytes:
         def expand(token: int) -> list[int]:
             if token < 256:
                 return [token]
@@ -83,7 +89,7 @@ class BPETokenizer:
             return expand(left) + expand(right)
 
         byte_values = [byte for token in tokens for byte in expand(token)]
-        return bytes(byte_values).decode("utf-8", errors="replace")
+        return bytes(byte_values)
 
     def save(self, path: str | Path) -> None:
         Path(path).write_text(json.dumps(self.merges), encoding="utf-8")

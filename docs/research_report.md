@@ -1,88 +1,65 @@
-# MiniLM Lab: A From-Scratch Transformer Training and Inference Study
+# MiniLM Lab: science prose systems study
 
 **Author:** Anvit Devadiga  
-**Status:** Reproducible baseline and systems experiments  
-**Hardware:** validated on CPU; designed for Apple Silicon MacBook Air using PyTorch MPS when available
+**Run:** one seed, 1,000 optimizer updates, CPU
+**Status:** reproducible baseline, not a broad-language benchmark
 
-## Abstract
+## Question
 
-MiniLM Lab is a small decoder-only language-model system implemented to understand modern language-model components from first principles. The project includes tokenization, causal self-attention, positional encoding, training, validation, checkpointing, sampling, evaluation, parameter-efficient fine-tuning utilities, quantization experiments, and KV-cache inference.
+Can a compact decoder-only model learn held-out scientific prose while exposing measurable inference and storage trade-offs on laptop-class hardware?
 
-The central principle is measurement: every meaningful change should be evaluated with a fixed corpus, reproducible configuration, validation metrics, and an explicit explanation of trade-offs.
+## Data and split
 
-## System
+Two Project Gutenberg public-domain editions are used: [Darwin, *On the Origin of Species*](https://www.gutenberg.org/ebooks/1228) and [Einstein, *Relativity: The Special and General Theory*](https://www.gutenberg.org/ebooks/30155). `prepare_science_corpus.py` removes the Gutenberg boilerplate, takes approximately the first 90% of each book's bytes at a paragraph boundary for training, and holds out the remainder. The exact downloaded and prepared SHA-256 hashes are in [the manifest](../data/science/manifest.json). The prepared corpus contains 1,008,977 training bytes and 112,112 validation bytes.
 
-The current baseline is a four-layer decoder Transformer with 192-dimensional representations, six attention heads, a 128-token context window, RMSNorm, SwiGLU feed-forward blocks, tied input/output embeddings, and AdamW optimization. Learned positional embeddings and RoPE are selectable. The default vocabulary is byte-level; a learned 512-token BPE vocabulary is also supported.
+This is a within-document holdout. It tests continuation on unseen passages from the same books, not transfer to unseen authors, topics or factual question answering. The corpus is modest and may contain repeated phrases across splits.
 
-Supported components include:
+## Model and protocol
 
-- byte-level and learned BPE tokenization
-- causal multi-head self-attention
-- learned positional embeddings and RoPE
-- gradient accumulation
-- checkpoint and best-checkpoint saving
-- validation loss, perplexity, and bits-per-byte evaluation
-- temperature, top-k, and top-p sampling
-- KV-cache incremental generation
-- LoRA building block
-- CPU dynamic-int8 quantization utility
-
-## Reproduction
-
-```bash
-source .venv/bin/activate
-python scripts/build_corpus.py
-python scripts/train_tiny.py data/minilm_systems.txt --steps 1000 --eval-interval 100 --gradient-accumulation-steps 4
-python scripts/evaluate.py data/minilm_systems.txt --checkpoint artifacts/best_checkpoint.pt
-python scripts/generate.py "MiniLM systems" --checkpoint artifacts/best_checkpoint.pt --tokens 128 --top-k 40 --top-p 0.95
-python scripts/benchmark_kv_cache.py --checkpoint artifacts/best_checkpoint.pt --tokens 128 --output artifacts/kv-cache.json
-```
+Four decoder blocks, width 192, six attention heads, context 128, byte vocabulary 256, learned positions, RMSNorm, SwiGLU MLP, tied embeddings. AdamW with learning rate 3e-4, microbatch size eight, four microbatches per optimizer step, seed 42. Checkpoints are selected by deterministic full-split validation at steps 250, 500, 750 and 1,000. The evaluator scores every next token once in nonoverlapping 128-token chunks, with the first token of each chunk as context. This is a fixed-window metric, not a rolling-context metric.
 
 ## Results
 
-The current numbers below use the upgraded RMSNorm/SwiGLU architecture, a fixed 1,000-step budget, and CPU validation. Throughput is hardware-specific; the recorded run is evidence of correctness and relative behavior, not a universal performance claim.
+| Measure | Value |
+| --- | ---: |
+| Best checkpoint | step 1,000 |
+| Held-out loss | 2.8669 nats/token |
+| Held-out perplexity | 17.5827 |
+| Bits per byte | 4.1361 |
+| Scored targets | 112,111 bytes |
+| Uncached 96-token decode | 119.4 ms median |
+| KV-cached 96-token decode | 33.4 ms median |
+| Cache speedup | 3.58× |
 
-The preserved experiment summary is tracked in [experiment_summary.json](data/experiment_summary.json), with the publication-style comparison in [results-dashboard.svg](figures/results-dashboard.svg). Regenerate the figures with `make assets` after changing the data.
+| Held-out source | Scored bytes | Perplexity | Bits per byte |
+| --- | ---: | ---: | ---: |
+| Darwin | 93,405 | 17.76 | 4.1505 |
+| Einstein | 18,703 | 16.68 | 4.0597 |
 
-### MiniLM Systems corpus
+Darwin contributes most of the aggregate held-out bytes. Each per-book evaluation starts its own context, so their target counts sum to two fewer than the concatenated evaluation; use the aggregate number for the headline result.
 
-Using the repository's documentation and implementation corpus, byte tokenization, and 1,000 training steps:
+The decode benchmark uses a fixed 21-token prompt, one warm-up and seven timed runs per mode, the same sampling seed, temperature, and no top-k filtering. It ran on CPU. The [raw record](data/science_run.json) includes every timing sample and training checkpoint. The [figure](figures/science-results.svg) is generated from that record.
 
-- best logged validation perplexity: **12.30**
-- full-split validation perplexity: **16.67**
-- bits per byte: **4.0593**
-- generation throughput: **707.55 tokens/second** on the CPU validation run
-- KV-cache speedup: **2.67×** for 128 generated tokens
+### Portable INT8 reference
 
-### Tiny Shakespeare comparison
+The old dynamic INT8 path failed on this Mac with `NoQEngine`. A portable per-output-channel INT8 reference now quantizes MLP linear weights and dequantizes during each forward pass. Attention projections, embeddings and the tied LM head remain FP32.
 
-Using the original corpus, byte tokenization, the same model shape, and the same training budget:
+| Measure | FP32 | Weight-only INT8 reference |
+| --- | ---: | ---: |
+| Stored model tensor bytes | 9,844,480 | 4,563,712 |
+| Held-out loss | 2.866917 | 2.867067 |
+| Median of 32 forward passes | 55.6 ms | 65.9 ms |
 
-- best logged validation perplexity: **14.98**
-- full-split validation perplexity: **15.36**
-- bits per byte: **3.9413**
-- generation throughput: **715.84 tokens/second** on the CPU validation run
-- KV-cache speedup: **2.74×** for 128 generated tokens
+The format saves 53.6% of stored tensor bytes in memory. It is slower because dequantization happens at runtime. Actual checkpoint file size, peak memory, and accelerated INT8 kernels were not measured.
 
-The systems corpus is a focused domain-adaptation demonstration, not a broad-language benchmark. Its lower best-step loss shows the model can learn repository-specific terminology and structure. Full-split evaluation is the more conservative measure because the validation sample is small.
+## Threats to validity
 
-## Engineering findings
+- Only one seed and one model shape were run. Do not treat the difference between methods as statistically established.
+- The science corpus is 1 MB. Perplexity 17.58 does not imply scientific understanding or reliable factual responses.
+- CPU timing is local to one execution environment. Apple M4 MPS throughput remains unmeasured in this run.
+- The training curves have four validation points. They show checkpoints, not a continuous trajectory.
+- The BPE tokenizer and LoRA wrapper remain educational components without a matched end-to-end comparison in this study.
 
-1. A tiny byte-level Transformer can learn strong corpus-specific terminology and formatting patterns from a focused technical corpus.
-2. Validation metrics fluctuate across stochastic batches, so full-split evaluation is more reliable than a single printed validation batch.
-3. BPE preprocessing must be implemented with care: a naive repeated full-corpus merge scan was unacceptably slow, while cached chunk encoding reduced preprocessing to well under a second for this corpus.
-4. Best-checkpoint selection matters because the final training step is not always the best validation step.
-5. KV caching changes the inference computation pattern by reusing previous keys and values instead of recomputing the entire context for every generated token. The repository now verifies that cached logits match full-forward logits for both supported positional-encoding modes.
+## Reproduce and extend
 
-## Limitations
-
-This is an educational and research baseline, not a general-purpose assistant. The MiniLM Systems corpus is intentionally narrow and assembled from this repository; it is not evidence of broad language knowledge. The current LoRA and quantization components are experiment utilities and require dedicated end-to-end benchmark runs before strong conclusions can be made.
-
-## Next experiments
-
-- compare learned positions against RoPE with matched seeds and budgets
-- benchmark uncached versus KV-cached generation on identical prompts
-- run full and LoRA fine-tuning comparisons
-- measure dynamic-int8 CPU size, latency, and quality impact; PyTorch documents the current eager quantization APIs as migration candidates for torchao ([quantization roadmap](https://docs.pytorch.org/docs/main/quantization))
-- compare 10M, 20M, and larger models within Mac memory limits
-- publish plots from `artifacts/metrics.json` and the evaluation reports
+Run the commands in [README](../README.md). `scripts/publish_science_results.py` checks the local artifacts and writes the tracked JSON record. `scripts/build_report_assets.py` renders the paper-style figures from that record. The next useful experiments are matched-seed RoPE and learned-position ablations, multi-seed runs, a genuinely unseen-book test, and an M4 MPS benchmark.

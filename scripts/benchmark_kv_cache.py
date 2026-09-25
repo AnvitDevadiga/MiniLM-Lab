@@ -1,5 +1,6 @@
 import argparse
 import json
+import statistics
 import time
 from pathlib import Path
 
@@ -15,27 +16,44 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", type=Path, default=Path("artifacts/best_checkpoint.pt"))
     parser.add_argument("--tokens", type=int, default=100)
+    parser.add_argument("--repeats", type=int, default=7)
+    parser.add_argument("--device", choices=("auto", "cpu", "mps"), default="auto")
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args()
-    device = "mps" if torch.backends.mps.is_available() else "cpu"
+    if args.tokens < 1 or args.repeats < 3:
+        parser.error("tokens must be positive and repeats must be at least three")
+    device = ("mps" if torch.backends.mps.is_available() else "cpu") if args.device == "auto" else args.device
     checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=False)
     model = MiniLM(MiniLMConfig(**checkpoint["config"])).to(device)
     model.load_state_dict(checkpoint["model"])
     tokenizer = ByteTokenizer() if checkpoint.get("tokenizer", "byte") == "byte" else BPETokenizer.load(checkpoint["tokenizer"])
-    prompt = "To be or not to be"
-    start = time.perf_counter()
-    generate(model, prompt, tokenizer, args.tokens)
-    if device == "mps":
-        torch.mps.synchronize()
-    uncached = time.perf_counter() - start
-    start = time.perf_counter()
-    generate_with_kv_cache(model, prompt, tokenizer, args.tokens)
-    if device == "mps":
-        torch.mps.synchronize()
-    cached = time.perf_counter() - start
+    prompt = "The experiment shows "
+    modes = {
+        "uncached": lambda: generate(model, prompt, tokenizer, args.tokens, top_k=None),
+        "cached": lambda: generate_with_kv_cache(model, prompt, tokenizer, args.tokens),
+    }
+    timings = {name: [] for name in modes}
+    for name, operation in modes.items():
+        for repeat in range(args.repeats + 1):
+            torch.manual_seed(1234)
+            if device == "mps":
+                torch.mps.synchronize()
+            start = time.perf_counter()
+            operation()
+            if device == "mps":
+                torch.mps.synchronize()
+            if repeat:
+                timings[name].append(time.perf_counter() - start)
+    uncached = statistics.median(timings["uncached"])
+    cached = statistics.median(timings["cached"])
     result = {
         "device": device,
         "generated_tokens": args.tokens,
+        "repeats": args.repeats,
+        "warmup_runs_per_mode": 1,
+        "prompt_tokens": len(tokenizer.encode(prompt)),
+        "uncached_seconds_samples": timings["uncached"],
+        "cached_seconds_samples": timings["cached"],
         "uncached_seconds": uncached,
         "cached_seconds": cached,
         "uncached_tokens_per_second": args.tokens / uncached,

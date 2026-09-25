@@ -1,105 +1,71 @@
 # MiniLM Lab
 
-**A measurable decoder-only Transformer built from first principles.**
+**A small language-model systems laboratory. Built and maintained by Anvit Devadiga.**
 
-Research code for understanding the systems behind small language models.
+[![CI](https://github.com/AnvitDevadiga/MiniLM-Lab/actions/workflows/ci.yml/badge.svg)](https://github.com/AnvitDevadiga/MiniLM-Lab/actions/workflows/ci.yml) [![Python 3.12](https://img.shields.io/badge/Python-3.12-111111)](https://www.python.org/) [![MIT](https://img.shields.io/badge/License-MIT-111111)](LICENSE)
 
-[![CI](https://github.com/AnvitDevadiga/MiniLM-Lab/actions/workflows/ci.yml/badge.svg)](https://github.com/AnvitDevadiga/MiniLM-Lab/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/Python-3.12%2B-111111?logo=python&logoColor=white)](https://www.python.org/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.2%2B-111111?logo=pytorch&logoColor=white)](https://pytorch.org/)
-[![License](https://img.shields.io/badge/License-MIT-111111.svg)](LICENSE)
+MiniLM Lab implements a decoder-only Transformer and measures its training and inference behavior on a laptop-sized budget. The current study trains on two public-domain science books: Charles Darwin's *On the Origin of Species* and Albert Einstein's *Relativity*. Each book contributes held-out paragraphs. The full data provenance and hashes are recorded in [the corpus manifest](data/science/manifest.json).
 
-**Maintainer:** Anvit Devadiga · **Status:** reproducible research baseline
+![Decoder architecture](docs/figures/architecture.svg)
 
-![MiniLM Lab benchmark dashboard](docs/figures/results-dashboard.svg)
+## Measured result
 
-MiniLM Lab is a local-first ML systems laboratory. It implements the path from bytes to next-token generation, then measures the trade-offs instead of hiding them behind framework abstractions. The repository is intentionally small, documented, and reproducible: every result has a protocol, a data source, and an explicit limitation.
+![Science prose results](docs/figures/science-results.svg)
 
-![MiniLM Lab architecture](docs/figures/architecture.svg)
+| Measurement | Result | Conditions |
+| --- | ---: | --- |
+| Held-out perplexity | 17.58 | 112,111 byte targets; both books represented |
+| Held-out bits per byte | 4.14 | Exact scored-byte denominator |
+| KV-cache speedup | 3.58× | 96 tokens, 21-token prompt, CPU median of seven repeats |
+| Weight-only INT8 stored size | 4.56 MB vs 9.84 MB | MLP linear weights only; attention and tied head remain FP32 |
+| INT8 loss change | +0.00015 nats/token | Same held-out text |
 
-![MiniLM Systems corpus training curves](docs/figures/training-curves.svg)
+The INT8 reference dequantizes weights on each forward pass and was **slower** than FP32 in this run. It demonstrates size and quality trade-offs, not accelerated deployment. These are one-seed, CPU results; no claim of general language ability or statistical significance follows from them. The [research report](docs/research_report.md) explains the method and limitations.
 
-## What is implemented
-
-```text
-text → byte/BPE tokenizer → embeddings → causal attention → RoPE/RMSNorm
-                            → SwiGLU MLP → tied LM head → loss/generation
-```
-
-| Area | Implementation | Evidence |
-| --- | --- | --- |
-| Tokenization | byte-level and learned BPE | round-trip tests, tokenizer trainer |
-| Transformer | causal MHA, SDPA, learned positions, RoPE, RMSNorm, SwiGLU | shape, loss, RoPE tests |
-| Training | AdamW, accumulation, validation, best checkpoints | `train_tiny.py` |
-| Inference | temperature, top-k, top-p, incremental KV cache | cache equivalence tests |
-| Adaptation | LoRA linear adapter | trainable-parameter test |
-| Compression | CPU dynamic INT8 experiment | `quantize.py` |
-| Measurement | throughput, cache speedup, perplexity, bits/byte | benchmark scripts and reports |
-
-## Quick start
+## Reproduce on a MacBook Air
 
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e '.[dev]'
 make check
+python scripts/prepare_science_corpus.py
+python scripts/train_tiny.py data/science/train.txt \
+  --validation-text data/science/validation.txt \
+  --steps 1000 --eval-interval 250 --gradient-accumulation-steps 4 \
+  --output-dir artifacts/runs/science-v2
+python scripts/evaluate.py data/science/train.txt \
+  --validation-text data/science/validation.txt \
+  --checkpoint artifacts/runs/science-v2/best_checkpoint.pt
 ```
 
-Train and evaluate a small run:
+Training chooses Apple MPS when available and otherwise runs on CPU. The published run used CPU because MPS was unavailable in its execution environment. Use `--device cpu` to match that hardware path. The corpus preparation script downloads the two source texts and records SHA-256 hashes. Source files can change upstream, so check the hashes before comparing a new run to the published one.
 
-```bash
-python scripts/train_tiny.py data/tinyshakespeare.txt --steps 1000 --eval-interval 100
-python scripts/evaluate.py data/tinyshakespeare.txt --checkpoint artifacts/best_checkpoint.pt
-python scripts/generate.py 'To be or not to be' --checkpoint artifacts/best_checkpoint.pt --tokens 200
-```
+## System
 
-Train a BPE vocabulary and run the same experiment:
+| Component | Implementation |
+| --- | --- |
+| Tokenization | UTF-8 byte tokenizer; educational BPE alternative |
+| Decoder | causal multi-head attention, learned positions or RoPE, RMSNorm, SwiGLU, tied token/output embeddings |
+| Training | AdamW, true optimizer-step accumulation, deterministic full-split checkpoint selection, resume with optimizer and RNG state |
+| Evaluation | every held-out next token scored once; perplexity and bits per byte |
+| Generation | temperature, top-k, top-p; KV cache with sliding-window refresh |
+| Experiments | repeated decode benchmark; portable MLP weight-only INT8 comparison; LoRA linear building block |
 
-```bash
-python scripts/train_tokenizer.py data/tinyshakespeare.txt --vocab-size 512 --output artifacts/bpe.json
-python scripts/train_tiny.py data/tinyshakespeare.txt --tokenizer artifacts/bpe.json --steps 1000
-```
+PyTorch provides tensor operations, automatic differentiation, multi-head attention and SDPA. The project exposes the model and systems decisions around those primitives. It is not a claim to reimplement an entire deep-learning framework.
 
-Benchmark the systems question directly:
+## Read the evidence
 
-```bash
-python scripts/benchmark_kv_cache.py --checkpoint artifacts/best_checkpoint.pt --tokens 100 --output artifacts/kv_cache.json
-python scripts/benchmark_generation.py --checkpoint artifacts/best_checkpoint.pt --tokens 100 --output artifacts/generation.json
-```
-
-## Project map
-
-```text
-src/minilm_lab/   model, tokenizers, data, generation, KV cache, LoRA
-scripts/          training, evaluation, generation, profiling, quantization
-tests/            correctness and regression tests
-docs/             audit, protocol, research report, experiment log
-configs/          small reproducible configurations
-```
-
-## Results and interpretation
-
-The checked-in dashboard contains the current 1,000-step comparison between the new MiniLM Systems corpus and the original Tiny Shakespeare baseline. The upgraded RMSNorm + SwiGLU architecture was validated on CPU; rerun on Apple Silicon MPS for hardware-specific throughput. Token-level perplexity cannot be compared directly across different vocabularies or corpora; use full-split evaluation, bits per byte, and matched-budget qualitative samples as complementary evidence.
-
-The benchmark data is tracked at [docs/data/experiment_summary.json](docs/data/experiment_summary.json), and the figures are regenerated with:
-
-```bash
-python scripts/build_report_assets.py
-```
-
-- [Implementation audit](docs/implementation_audit.md)
 - [Research report](docs/research_report.md)
+- [Raw science run record](docs/data/science_run.json)
 - [Experiment protocol](docs/experiment_protocol.md)
-- [Experiment log](docs/experiment_log.md)
+- [Implementation audit](docs/implementation_audit.md)
+- [2026 positioning](docs/positioning_2026.md)
 - [Roadmap](docs/roadmap.md)
 - [Contributing](CONTRIBUTING.md)
-- [Security policy](SECURITY.md)
-- [Citation](CITATION.cff)
 
 ## Scope
 
-This is an educational, reproducible systems project—not a general-purpose assistant. Tiny Shakespeare is narrow and small. Results describe this corpus, model size, software stack, and hardware; they are not claims about broad language understanding.
+The corpus contains about 1 MB of training text. The model is a controlled educational system for studying language-model mechanics and inference trade-offs. Generated text should not be treated as reliable scientific information.
 
-## License
-
-MIT. Built by Anvit Devadiga.
+MIT licensed. © Anvit Devadiga.

@@ -2,7 +2,7 @@
 
 ## Milestone 1 — foundations
 
-- [x] repository structure and local-first configuration
+- [x] repository structure and local-first command-line configuration
 - [x] decoder-only Transformer forward pass
 - [x] causal masking and next-token loss
 - [x] deterministic tests for shapes and causality
@@ -23,12 +23,13 @@
 
 ## Milestone 4 — research-quality comparisons
 
-- [x] learned positions versus RoPE
+- [x] learned positions and RoPE implementations
+- [ ] matched learned-position versus RoPE experiment
 - [ ] AdamW versus SGD
 - [ ] context lengths 128/256/512
 - [ ] model-size scaling
 - [x] LoRA building block
-- [x] quantization experiment utility
+- [x] portable weight-only INT8 comparison, including quality, storage, and latency
 - [ ] full fine-tuning versus LoRA quality comparison
 
 Every experiment should have a configuration, a fixed seed, recorded metrics, and a short written conclusion.
