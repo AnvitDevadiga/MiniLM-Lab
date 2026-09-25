@@ -11,6 +11,7 @@ dependencies = ["torch>=2.2", "numpy>=2.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
+report = ["reportlab>=4", "cairosvg>=2.7"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -64,6 +64,7 @@ PyTorch provides tensor operations, automatic differentiation, multi-head attent
 
 ## Read the evidence
 
+- [Technical report (PDF)](output/pdf/MiniLM-Lab-Technical-Report.pdf)
 - [Research report](docs/research_report.md)
 - [Raw science run record](docs/data/science_run.json)
 - [Experiment protocol](docs/experiment_protocol.md)
@@ -71,6 +72,10 @@ PyTorch provides tensor operations, automatic differentiation, multi-head attent
 - [2026 positioning](docs/positioning_2026.md)
 - [Roadmap](docs/roadmap.md)
 - [Contributing](CONTRIBUTING.md)
+
+The PDF is generated from the tracked results and SVG figures with
+\`python -m pip install -e '.[report]'\` followed by
+\`python scripts/build_technical_report.py\`.
 
 ## Scope
 
