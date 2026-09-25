@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 944 508" role="img" aria-labelledby="title desc">
+<title id="title">INT8 storage and runtime trade-off</title><desc id="desc">INT8 reduced stored model tensors from 9.84 to 4.56 megabytes, but 32 forward passes increased from 55.6 to 65.9 milliseconds.</desc>
+<rect width="944" height="508" rx="22" fill="#0b1018"/><text x="42" y="51" class="eyebrow">EXPERIMENT 03 / COMPRESSION</text><text x="42" y="93" class="title">Smaller is not always faster.</text><text x="42" y="126" class="subtitle">INT8 shrinks stored tensors, but this portable reference pays a runtime cost.</text><rect x="42" y="164" width="420" height="249" rx="16" fill="#151d29" stroke="#2c394b"/><text x="65" y="204" class="label">Stored tensor size</text><text x="65" y="244" class="body">FP32</text><rect x="157" y="226" width="220" height="24" rx="6" fill="#ffd17a"/><text x="390" y="244" class="small">9.84 MB</text><text x="65" y="292" class="body">INT8</text><rect x="157" y="274" width="102.0" height="24" rx="6" fill="#67e8f9"/><text x="269.0" y="292" class="small">4.56 MB</text><text x="65" y="369" class="value">−53.6%</text><text x="235" y="369" class="body">stored size</text><rect x="482" y="164" width="420" height="249" rx="16" fill="#151d29" stroke="#2c394b"/><text x="505" y="204" class="label">32 forward passes</text><text x="505" y="244" class="body">FP32</text><rect x="595" y="226" width="168.6" height="24" rx="6" fill="#b8f28b"/><text x="809" y="244" class="small">55.6 ms</text><text x="505" y="292" class="body">INT8</text><rect x="595" y="274" width="200" height="24" rx="6" fill="#ffd17a"/><text x="809" y="292" class="small">65.9 ms</text><text x="505" y="369" class="label">INT8 is slower here</text><text x="42" y="454" class="small">Only MLP linear weights are quantized. Validation loss changed by +0.00015 nats/byte.</text><text x="42" y="480" class="small">This does not demonstrate accelerated INT8 inference. Source: docs/data/science_run.json</text>
+<style>
+.eyebrow{font:700 12px Arial,sans-serif;letter-spacing:2px;fill:#67e8f9}
+.title{font:700 31px Arial,sans-serif;fill:#f4f7fb}
+.subtitle{font:16px Arial,sans-serif;fill:#a9b8c9}
+.label{font:700 18px Arial,sans-serif;fill:#f4f7fb}
+.body{font:15px Arial,sans-serif;fill:#a9b8c9}
+.small{font:13px Arial,sans-serif;fill:#a9b8c9}
+.value{font:700 34px Arial,sans-serif;fill:#f4f7fb}
+.axis{font:14px Arial,sans-serif;fill:#a9b8c9}
+</style></svg>

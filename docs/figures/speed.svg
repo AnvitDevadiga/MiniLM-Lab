@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 944 526" role="img" aria-labelledby="title desc">
+<title id="title">KV-cache latency</title><desc id="desc">For 96 generated tokens, uncached median was 119.4 milliseconds and cached median was 33.4 milliseconds, a 3.58-times speedup on CPU.</desc>
+<rect width="944" height="526" rx="22" fill="#0b1018"/><text x="42" y="51" class="eyebrow">EXPERIMENT 02 / GENERATION</text><text x="42" y="93" class="title">Reuse past work. Generate faster.</text><text x="42" y="126" class="subtitle">Time for 96 generated tokens after a 21-token prompt. Shorter is better.</text><text x="42" y="189" class="label">Recompute every step</text><rect x="250" y="170" width="570.0" height="36" rx="8" fill="#ffd17a"/><text x="833.0" y="195" class="label">119.4 ms</text><text x="42" y="294" class="label">Reuse KV cache</text><rect x="250" y="275" width="159.4" height="36" rx="8" fill="#67e8f9"/><text x="422.4" y="300" class="label">33.4 ms</text><rect x="42" y="364" width="860" height="96" rx="15" fill="#151d29" stroke="#2c394b"/><text x="66" y="425" class="value">3.58×</text><text x="206" y="408" class="label">faster with caching</text><text x="206" y="433" class="body">Same sampling settings; CPU median of 7 runs each.</text><text x="42" y="497" class="small">CPU result, not an Apple M4/MPS benchmark. Source: docs/data/science_run.json</text>
+<style>
+.eyebrow{font:700 12px Arial,sans-serif;letter-spacing:2px;fill:#67e8f9}
+.title{font:700 31px Arial,sans-serif;fill:#f4f7fb}
+.subtitle{font:16px Arial,sans-serif;fill:#a9b8c9}
+.label{font:700 18px Arial,sans-serif;fill:#f4f7fb}
+.body{font:15px Arial,sans-serif;fill:#a9b8c9}
+.small{font:13px Arial,sans-serif;fill:#a9b8c9}
+.value{font:700 34px Arial,sans-serif;fill:#f4f7fb}
+.axis{font:14px Arial,sans-serif;fill:#a9b8c9}
+</style></svg>

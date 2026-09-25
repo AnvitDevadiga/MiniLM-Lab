@@ -38,7 +38,7 @@ Four decoder blocks, width 192, six attention heads, context 128, byte vocabular
 
 Darwin contributes most of the aggregate held-out bytes. Each per-book evaluation starts its own context, so their target counts sum to two fewer than the concatenated evaluation; use the aggregate number for the headline result.
 
-The decode benchmark uses a fixed 21-token prompt, one warm-up and seven timed runs per mode, the same sampling seed, temperature, and no top-k filtering. It ran on CPU. The [raw record](data/science_run.json) includes every timing sample and training checkpoint. The [figure](figures/science-results.svg) is generated from that record.
+The decode benchmark uses a fixed 21-token prompt, one warm-up and seven timed runs per mode, the same sampling seed, temperature, and no top-k filtering. It ran on CPU. The [raw record](data/science_run.json) includes every timing sample and training checkpoint. The [learning](figures/learning.svg), [speed](figures/speed.svg), and [compression](figures/tradeoff.svg) figures are generated from that record.
 
 ### Portable INT8 reference
 
@@ -62,4 +62,4 @@ The format saves 53.6% of stored tensor bytes in memory. It is slower because de
 
 ## Reproduce and extend
 
-Run the commands in [README](../README.md). `scripts/publish_science_results.py` checks the local artifacts and writes the tracked JSON record. `scripts/build_report_assets.py` renders the paper-style figures from that record. The next useful experiments are matched-seed RoPE and learned-position ablations, multi-seed runs, a genuinely unseen-book test, and an M4 MPS benchmark.
+Run the commands in [README](../README.md). `scripts/publish_science_results.py` checks the local artifacts and writes the tracked JSON record. `scripts/build_report_assets.py` renders the repository figures from that record. The next useful experiments are matched-seed RoPE and learned-position ablations, multi-seed runs, a genuinely unseen-book test, and an M4 MPS benchmark.

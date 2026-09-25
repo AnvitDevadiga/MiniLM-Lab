@@ -1,88 +1,114 @@
-"""Render paper-style monochrome figures from measured experiment records."""
+"""Create accessible, data-backed SVG figures for the repository."""
 
 import html
 import json
-import math
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "docs/data/science_run.json"
 OUTPUT = ROOT / "docs/figures"
+BG, PANEL, EDGE = "#0b1018", "#151d29", "#2c394b"
+INK, MUTED = "#f4f7fb", "#a9b8c9"
+CYAN, LIME, AMBER = "#67e8f9", "#b8f28b", "#ffd17a"
 
 
-def label(value: object) -> str:
-    return html.escape(str(value), quote=True)
+def svg(title: str, description: str, height: int, body: str) -> str:
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 944 {height}" role="img" aria-labelledby="title desc">
+<title id="title">{html.escape(title)}</title><desc id="desc">{html.escape(description)}</desc>
+<rect width="944" height="{height}" rx="22" fill="{BG}"/>{body}
+<style>
+.eyebrow{{font:700 12px Arial,sans-serif;letter-spacing:2px;fill:{CYAN}}}
+.title{{font:700 31px Arial,sans-serif;fill:{INK}}}
+.subtitle{{font:16px Arial,sans-serif;fill:{MUTED}}}
+.label{{font:700 18px Arial,sans-serif;fill:{INK}}}
+.body{{font:15px Arial,sans-serif;fill:{MUTED}}}
+.small{{font:13px Arial,sans-serif;fill:{MUTED}}}
+.value{{font:700 34px Arial,sans-serif;fill:{INK}}}
+.axis{{font:14px Arial,sans-serif;fill:{MUTED}}}
+</style></svg>"""
 
 
-def architecture() -> str:
-    stages = [(70, "Input", "UTF-8 bytes"), (270, "Embedding", "token + position"), (470, "Decoder × 4", "attention + SwiGLU"), (670, "Output", "tied LM head")]
-    elements = []
-    for x, title, subtitle in stages:
-        elements.append(f'<rect x="{x}" y="110" width="150" height="82" fill="white" stroke="#1a1a1a" stroke-width="1.4"/><text x="{x + 75}" y="143" text-anchor="middle" class="stage">{title}</text><text x="{x + 75}" y="167" text-anchor="middle" class="minor">{subtitle}</text>')
-        if x < 670:
-            elements.append(f'<path d="M{x + 156} 151h42m-8-7 8 7-8 7" fill="none" stroke="#1a1a1a" stroke-width="1.4"/>')
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 255" role="img" aria-labelledby="title desc">
-<title id="title">MiniLM Lab decoder architecture</title><desc id="desc">UTF-8 input is embedded, processed by four causal decoder blocks, and projected to next-token logits with tied output weights.</desc>
-<rect width="900" height="255" fill="white"/><text x="48" y="50" class="heading">Figure 1. Decoder architecture</text><text x="48" y="77" class="minor">The benchmark run uses learned positions, RMSNorm and SwiGLU.</text>
-{''.join(elements)}<text x="48" y="228" class="foot">Each decoder block: RMSNorm → causal attention → residual → RMSNorm → SwiGLU → residual.</text>
-<style>.heading{{font:600 23px Arial,sans-serif;fill:#111}}.stage{{font:600 15px Arial,sans-serif;fill:#111}}.minor{{font:13px Arial,sans-serif;fill:#555}}.foot{{font:12px Arial,sans-serif;fill:#555}}</style></svg>'''
+def architecture(data: dict) -> str:
+    cards = [
+        (42, "01", "Read text", "Darwin + Einstein", CYAN),
+        (265, "02", "Turn into bytes", f"{data['config']['vocab_size']} possible values", LIME),
+        (488, "03", "Predict next byte", f"{data['config']['num_layers']} decoder layers", AMBER),
+        (711, "04", "Generate text", "Repeat prediction", CYAN),
+    ]
+    body = '<text x="42" y="52" class="eyebrow">THE IDEA IN FOUR STEPS</text><text x="42" y="94" class="title">A tiny language model, end to end.</text><text x="42" y="126" class="subtitle">It learns which byte is likely to come next. Then it repeats.</text>'
+    for x, number, heading, detail, color in cards:
+        body += f'<rect x="{x}" y="168" width="193" height="145" rx="16" fill="{PANEL}" stroke="{EDGE}"/><text x="{x+20}" y="202" fill="{color}" class="eyebrow">{number}</text><text x="{x+20}" y="246" class="label">{heading}</text><text x="{x+20}" y="278" class="body">{detail}</text>'
+        if x < 711:
+            body += f'<path d="M{x+198} 240h19m-7-7 7 7-7 7" fill="none" stroke="{CYAN}" stroke-width="2"/>'
+    body += f'<line x1="42" x2="902" y1="342" y2="342" stroke="{EDGE}"/><text x="42" y="372" class="small">Inside the decoder: causal attention · RMSNorm · SwiGLU · tied output weights</text>'
+    return svg("How MiniLM Lab works", "Read science text, convert it to bytes, predict the next byte with four decoder layers, and repeat predictions to generate text.", 398, body)
 
 
-def results(data: dict) -> str:
-    evaluation = data["evaluation"]
-    benchmark = data["benchmark"]
-    metrics = data["metrics"]
-    x0, x1, y0, y1 = 92, 496, 158, 390
-    losses = [record["validation_loss"] for record in metrics]
-    training = [record["train_loss"] for record in metrics]
-    lower = math.floor(min(losses + training) * 2) / 2 - 0.25
-    upper = math.ceil(max(losses + training) * 2) / 2 + 0.25
-    final_step = max(record["step"] for record in metrics)
+def learning(data: dict) -> str:
+    rows = data["metrics"]
+    left, right, top, bottom = 105, 865, 195, 465
+    last = rows[-1]["step"]
 
-    def point(step: int, value: float) -> str:
-        return f"{x0 + (step / final_step) * (x1 - x0):.1f},{y1 - ((value - lower) / (upper - lower)) * (y1 - y0):.1f}"
+    def xy(step: int, loss: float) -> tuple[float, float]:
+        return left + step / last * (right - left), bottom - (loss - 2.5) * (bottom - top)
 
-    train_line = " ".join(point(record["step"], record["train_loss"]) for record in metrics)
-    validation_line = " ".join(point(record["step"], record["validation_loss"]) for record in metrics)
-    ticks = []
-    for tick in (lower, (lower + upper) / 2, upper):
-        y = y1 - ((tick - lower) / (upper - lower)) * (y1 - y0)
-        ticks.append(f'<line x1="{x0}" y1="{y:.1f}" x2="{x1}" y2="{y:.1f}" stroke="#dedede"/><text x="{x0 - 12}" y="{y + 4:.1f}" text-anchor="end" class="small">{tick:.1f}</text>')
-    max_time = max(benchmark["uncached_seconds"], benchmark["cached_seconds"])
-    bars = []
-    for y, title, seconds, fill in ((212, "Full-context", benchmark["uncached_seconds"], "#303030"), (300, "KV cache", benchmark["cached_seconds"], "#a8a8a8")):
-        width = seconds / max_time * 247
-        bars.append(f'<text x="575" y="{y - 10}" class="axis">{title}</text><rect x="575" y="{y}" width="{width:.1f}" height="32" fill="{fill}"/><text x="{575 + width + 10:.1f}" y="{y + 22}" class="value">{seconds * 1000:.0f} ms</text>')
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 590" role="img" aria-labelledby="title desc">
-<title id="title">Science prose language-model results</title><desc id="desc">Full held-out validation loss is {evaluation['validation_loss']:.3f} nats per token, {evaluation['bits_per_byte']:.3f} bits per byte. Median KV cache speedup is {benchmark['speedup']:.2f} times over {benchmark['repeats']} repeats.</desc>
-<rect width="900" height="590" fill="white"/>
-<text x="48" y="51" class="heading">Figure 2. Science prose experiment</text>
-<text x="48" y="76" class="minor">Darwin + Einstein · held-out paragraphs · {label(benchmark['device'].upper())} · {len(metrics)} validation checkpoints</text>
-<line x1="48" y1="99" x2="852" y2="99" stroke="#111" stroke-width="1.2"/>
-<text x="48" y="131" class="axis">A · Loss by optimizer step (nats/token)</text>
-{''.join(ticks)}
-<line x1="{x0}" y1="{y1}" x2="{x1}" y2="{y1}" stroke="#111"/>
-<polyline points="{train_line}" fill="none" stroke="#111" stroke-width="2.5"/>
-<polyline points="{validation_line}" fill="none" stroke="#777" stroke-width="2.5" stroke-dasharray="8 5"/>
-<text x="{x0}" y="415" class="small">0</text><text x="{x1}" y="415" text-anchor="end" class="small">{final_step} steps</text>
-<line x1="92" y1="446" x2="117" y2="446" stroke="#111" stroke-width="2.5"/><text x="126" y="450" class="small">Train</text>
-<line x1="192" y1="446" x2="217" y2="446" stroke="#777" stroke-width="2.5" stroke-dasharray="8 5"/><text x="226" y="450" class="small">Held-out</text>
-<text x="555" y="131" class="axis">B · Decode latency, {benchmark['generated_tokens']} tokens</text>
-{''.join(bars)}<text x="575" y="392" class="small">Median of {benchmark['repeats']} timed runs; one warm-up per mode</text>
-<line x1="48" y1="478" x2="852" y2="478" stroke="#bbb"/>
-<text x="48" y="512" class="value">{evaluation['perplexity']:.2f}</text><text x="145" y="512" class="small">held-out perplexity</text>
-<text x="374" y="512" class="value">{evaluation['bits_per_byte']:.2f}</text><text x="449" y="512" class="small">bits / byte</text>
-<text x="650" y="512" class="value">{benchmark['speedup']:.2f}×</text><text x="719" y="512" class="small">cache speedup</text>
-<text x="48" y="554" class="foot">Source: docs/data/science_run.json · One seed; descriptive results, not a confidence interval.</text>
-<style>.heading{{font:600 23px Arial,sans-serif;fill:#111}}.axis{{font:600 14px Arial,sans-serif;fill:#222}}.value{{font:600 17px Arial,sans-serif;fill:#111}}.small{{font:12px Arial,sans-serif;fill:#444}}.minor{{font:13px Arial,sans-serif;fill:#555}}.foot{{font:12px Arial,sans-serif;fill:#666}}</style></svg>'''
+    body = '<text x="42" y="51" class="eyebrow">EXPERIMENT 01 / LEARNING</text><text x="42" y="93" class="title">Did it learn from the books?</text><text x="42" y="126" class="subtitle">Lower loss means better next-byte predictions. Green is text held back from training.</text>'
+    for tick in (2.5, 3.0, 3.5):
+        y = xy(0, tick)[1]
+        body += f'<line x1="{left}" x2="{right}" y1="{y:.1f}" y2="{y:.1f}" stroke="{EDGE}"/><text x="{left-18}" y="{y+5:.1f}" text-anchor="end" class="axis">{tick:.1f}</text>'
+    for row in rows:
+        x = xy(row["step"], 2.5)[0]
+        body += f'<text x="{x:.1f}" y="493" text-anchor="middle" class="axis">{row["step"]}</text>'
+    for key, color in (("train_loss", CYAN), ("validation_loss", LIME)):
+        points = " ".join(f"{xy(row['step'], row[key])[0]:.1f},{xy(row['step'], row[key])[1]:.1f}" for row in rows)
+        body += f'<polyline points="{points}" fill="none" stroke="{color}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>'
+        for row in rows:
+            x, y = xy(row["step"], row[key])
+            body += f'<circle cx="{x:.1f}" cy="{y:.1f}" r="5" fill="{color}" stroke="{BG}" stroke-width="2"/>'
+    body += f'<text x="105" y="532" class="axis">Optimizer updates →</text><circle cx="660" cy="527" r="6" fill="{CYAN}"/><text x="676" y="532" class="axis">Training batch</text><circle cx="793" cy="527" r="6" fill="{LIME}"/><text x="809" y="532" class="axis">Held-out</text>'
+    body += f'<line x1="42" x2="902" y1="556" y2="556" stroke="{EDGE}"/><text x="42" y="583" class="small">Four measured checkpoints · 112,111 held-out byte predictions · one seed · source: docs/data/science_run.json</text>'
+    description = "Held-out loss by optimizer update: " + "; ".join(
+        f"{row['step']} updates, {row['validation_loss']:.3f} nats per byte" for row in rows
+    ) + "."
+    return svg("Training and held-out loss", description, 607, body)
+
+
+def speed(data: dict) -> str:
+    bench = data["benchmark"]
+    slow, fast = bench["uncached_seconds"] * 1000, bench["cached_seconds"] * 1000
+    body = f'<text x="42" y="51" class="eyebrow">EXPERIMENT 02 / GENERATION</text><text x="42" y="93" class="title">Reuse past work. Generate faster.</text><text x="42" y="126" class="subtitle">Time for {bench["generated_tokens"]} generated tokens after a {bench["prompt_tokens"]}-token prompt. Shorter is better.</text>'
+    for y, name, value, color in ((204, "Recompute every step", slow, AMBER), (309, "Reuse KV cache", fast, CYAN)):
+        width = value / slow * 570
+        body += f'<text x="42" y="{y-15}" class="label">{name}</text><rect x="250" y="{y-34}" width="{width:.1f}" height="36" rx="8" fill="{color}"/><text x="{min(263+width, 850):.1f}" y="{y-9}" class="label">{value:.1f} ms</text>'
+    body += f'<rect x="42" y="364" width="860" height="96" rx="15" fill="{PANEL}" stroke="{EDGE}"/><text x="66" y="425" class="value">{bench["speedup"]:.2f}×</text><text x="206" y="408" class="label">faster with caching</text><text x="206" y="433" class="body">Same sampling settings; CPU median of {bench["repeats"]} runs each.</text>'
+    body += '<text x="42" y="497" class="small">CPU result, not an Apple M4/MPS benchmark. Source: docs/data/science_run.json</text>'
+    return svg("KV-cache latency", f"For {bench['generated_tokens']} generated tokens, uncached median was {slow:.1f} milliseconds and cached median was {fast:.1f} milliseconds, a {bench['speedup']:.2f}-times speedup on CPU.", 526, body)
+
+
+def tradeoff(data: dict) -> str:
+    q = data["quantization"]
+    old, new = q["original_stored_bytes"] / 1_000_000, q["int8_stored_bytes"] / 1_000_000
+    reduction = 100 * (1 - new / old)
+    old_ms, new_ms = q["original_32_forward_seconds"] * 1000, q["int8_32_forward_seconds"] * 1000
+    body = '<text x="42" y="51" class="eyebrow">EXPERIMENT 03 / COMPRESSION</text><text x="42" y="93" class="title">Smaller is not always faster.</text><text x="42" y="126" class="subtitle">INT8 shrinks stored tensors, but this portable reference pays a runtime cost.</text>'
+    body += f'<rect x="42" y="164" width="420" height="249" rx="16" fill="{PANEL}" stroke="{EDGE}"/><text x="65" y="204" class="label">Stored tensor size</text><text x="65" y="244" class="body">FP32</text><rect x="157" y="226" width="220" height="24" rx="6" fill="{AMBER}"/><text x="390" y="244" class="small">{old:.2f} MB</text><text x="65" y="292" class="body">INT8</text><rect x="157" y="274" width="{220*new/old:.1f}" height="24" rx="6" fill="{CYAN}"/><text x="{167+220*new/old:.1f}" y="292" class="small">{new:.2f} MB</text><text x="65" y="369" class="value">−{reduction:.1f}%</text><text x="235" y="369" class="body">stored size</text>'
+    body += f'<rect x="482" y="164" width="420" height="249" rx="16" fill="{PANEL}" stroke="{EDGE}"/><text x="505" y="204" class="label">32 forward passes</text><text x="505" y="244" class="body">FP32</text><rect x="595" y="226" width="{200*old_ms/new_ms:.1f}" height="24" rx="6" fill="{LIME}"/><text x="809" y="244" class="small">{old_ms:.1f} ms</text><text x="505" y="292" class="body">INT8</text><rect x="595" y="274" width="200" height="24" rx="6" fill="{AMBER}"/><text x="809" y="292" class="small">{new_ms:.1f} ms</text><text x="505" y="369" class="label">INT8 is slower here</text>'
+    body += f'<text x="42" y="454" class="small">Only MLP linear weights are quantized. Validation loss changed by +{q["loss_delta"]:.5f} nats/byte.</text><text x="42" y="480" class="small">This does not demonstrate accelerated INT8 inference. Source: docs/data/science_run.json</text>'
+    return svg("INT8 storage and runtime trade-off", f"INT8 reduced stored model tensors from {old:.2f} to {new:.2f} megabytes, but 32 forward passes increased from {old_ms:.1f} to {new_ms:.1f} milliseconds.", 508, body)
 
 
 def main() -> None:
     data = json.loads(SOURCE.read_text(encoding="utf-8"))
     OUTPUT.mkdir(parents=True, exist_ok=True)
-    (OUTPUT / "architecture.svg").write_text(architecture(), encoding="utf-8")
-    (OUTPUT / "science-results.svg").write_text(results(data), encoding="utf-8")
-    print("wrote research figures to docs/figures")
+    figures = {
+        "architecture.svg": architecture(data),
+        "learning.svg": learning(data),
+        "speed.svg": speed(data),
+        "tradeoff.svg": tradeoff(data),
+    }
+    for name, content in figures.items():
+        (OUTPUT / name).write_text(content, encoding="utf-8")
+    print(f"wrote {len(figures)} figures")
 
 
 if __name__ == "__main__":
