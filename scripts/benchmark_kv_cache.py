@@ -23,7 +23,7 @@ def main() -> None:
     if args.tokens < 1 or args.repeats < 3:
         parser.error("tokens must be positive and repeats must be at least three")
     device = ("mps" if torch.backends.mps.is_available() else "cpu") if args.device == "auto" else args.device
-    checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=False)
+    checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=True)
     model = MiniLM(MiniLMConfig(**checkpoint["config"])).to(device)
     model.load_state_dict(checkpoint["model"])
     tokenizer = ByteTokenizer() if checkpoint.get("tokenizer", "byte") == "byte" else BPETokenizer.load(checkpoint["tokenizer"])

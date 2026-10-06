@@ -63,7 +63,7 @@ def main() -> None:
     start_step = 0
     corpus_sha256 = hashlib.sha256(args.text.read_bytes() + (args.validation_text.read_bytes() if args.validation_text else b"")).hexdigest()
     if args.resume and output.exists():
-        checkpoint = torch.load(output, map_location=device, weights_only=False)
+        checkpoint = torch.load(output, map_location=device, weights_only=True)
         if checkpoint["config"] != config.__dict__ or checkpoint.get("corpus_sha256") != corpus_sha256:
             raise ValueError("resume config or corpus differs from checkpoint")
         model.load_state_dict(checkpoint["model"])

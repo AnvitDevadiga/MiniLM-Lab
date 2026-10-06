@@ -22,7 +22,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=Path("artifacts/evaluation.json"))
     args = parser.parse_args()
     device = ("mps" if torch.backends.mps.is_available() else "cpu") if args.device == "auto" else args.device
-    checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=False)
+    checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=True)
     tokenizer_name = checkpoint.get("tokenizer", "byte")
     tokenizer = ByteTokenizer() if tokenizer_name == "byte" else BPETokenizer.load(tokenizer_name)
     if args.validation_text:

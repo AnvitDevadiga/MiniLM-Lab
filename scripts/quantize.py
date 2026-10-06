@@ -34,7 +34,7 @@ def main() -> None:
     parser.add_argument("--validation-text", type=Path, required=True)
     parser.add_argument("--output", type=Path, default=Path("artifacts/int8-comparison.json"))
     args = parser.parse_args()
-    checkpoint = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
+    checkpoint = torch.load(args.checkpoint, map_location="cpu", weights_only=True)
     if checkpoint.get("tokenizer") != "byte":
         parser.error("this reference experiment currently supports byte checkpoints")
     model = MiniLM(MiniLMConfig(**checkpoint["config"]))
