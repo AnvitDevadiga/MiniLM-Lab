@@ -16,8 +16,11 @@ def split_tokens(tokens: Tensor, validation_fraction: float = 0.1) -> tuple[Tens
 
 
 def make_batch(tokens: Tensor, batch_size: int, context_length: int, device: str) -> tuple[Tensor, Tensor]:
+    if batch_size < 1 or context_length < 1:
+        raise ValueError("batch_size and context_length must be positive")
     if tokens.numel() <= context_length:
         raise ValueError("split must contain more tokens than context_length")
+    # The target window is one token longer than the input window.
     starts = torch.randint(0, tokens.numel() - context_length, (batch_size,))
     x = torch.stack([tokens[i : i + context_length] for i in starts])
     y = torch.stack([tokens[i + 1 : i + context_length + 1] for i in starts])
