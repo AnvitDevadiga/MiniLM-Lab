@@ -16,6 +16,9 @@ import numpy
 import torch
 
 ROOT = Path(__file__).resolve().parents[2]
+# 1: original schema. 2: training/evaluation records carry deterministic model
+# identity digests and explicit hyperparameters; benchmarks keep raw samples.
+RECORD_VERSION = 2
 
 
 def _run(command: list[str]) -> str | None:
@@ -104,7 +107,7 @@ def write_record(directory: str | Path, name: str, payload: dict) -> Path:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     commit = (payload.get("environment", {}).get("git", {}).get("commit") or "nogit")[:7]
     path = directory / f"{stamp}_{name}_{commit}.json"
-    record = {"record_version": 1, "created_utc": stamp, **payload}
+    record = {"record_version": RECORD_VERSION, "created_utc": stamp, **payload}
     with path.open("x", encoding="utf-8") as handle:
         json.dump(record, handle, indent=2)
         handle.write("\n")

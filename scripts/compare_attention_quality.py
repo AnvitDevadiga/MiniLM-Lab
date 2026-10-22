@@ -14,6 +14,7 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 
+from minilm_lab.identity import checkpoint_identity
 from minilm_lab.kv_cache import greedy_decode
 from minilm_lab.model import MiniLM, MiniLMConfig
 from minilm_lab.provenance import environment, file_sha256, write_record
@@ -75,7 +76,8 @@ def main() -> None:
         prompt_starts = torch.linspace(0, tokens.numel() - context - 1, args.prompts).long()
         prompts = torch.stack([tokens[s : s + 32] for s in prompt_starts])
         oracle_generation = greedy_decode(oracle_model, prompts, args.generate_tokens)[:, 32:]
-        seed = torch.load(path, map_location="cpu", weights_only=True).get("seed")
+        raw_checkpoint = torch.load(path, map_location="cpu", weights_only=True)
+        seed, identity = raw_checkpoint.get("seed"), checkpoint_identity(raw_checkpoint)["sha256"]
         for device, dtype_name in targets:
             model = load(path, device, DTYPES[dtype_name])
             for backend in args.backends.split(","):
@@ -90,6 +92,7 @@ def main() -> None:
                 row = {
                     "checkpoint": str(path),
                     "checkpoint_sha256": file_sha256(path),
+                    "model_identity_sha256": identity,
                     "seed": seed,
                     "device": device,
                     "dtype": dtype_name,

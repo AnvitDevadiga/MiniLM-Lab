@@ -6,6 +6,7 @@ from pathlib import Path
 
 import torch
 
+from minilm_lab.identity import SCHEME, checkpoint_identity
 from minilm_lab.model import canonical_backend
 from minilm_lab.provenance import environment, file_sha256, write_record
 
@@ -27,6 +28,13 @@ def main() -> None:
     final = torch.load(args.run_dir / "tiny_checkpoint.pt", map_location="cpu", weights_only=True)
     summary = args.run_dir / "run_summary.json"
     best = torch.load(args.run_dir / "best_checkpoint.pt", map_location="cpu", weights_only=True)
+    identities = {}
+    for label, checkpoint in (("best", best), ("final", final)):
+        identity = checkpoint_identity(checkpoint)
+        stored = checkpoint.get("model_identity")
+        if stored and stored != identity:
+            raise ValueError(f"{label} checkpoint's stored model identity does not match its tensors")
+        identities[label] = identity["sha256"]
     payload = {
         "experiment": "training",
         "environment": environment("cpu"),
@@ -57,6 +65,9 @@ def main() -> None:
             "best_checkpoint_sha256": file_sha256(args.run_dir / "best_checkpoint.pt"),
             "final_checkpoint_sha256": file_sha256(args.run_dir / "tiny_checkpoint.pt"),
             "run_summary": json.loads(summary.read_text(encoding="utf-8")) if summary.exists() else None,
+            "model_identity_scheme": SCHEME,
+            "best_model_identity_sha256": identities["best"],
+            "final_model_identity_sha256": identities["final"],
         },
     }
     name = f"training_{args.protocol}_{canonical_backend(final.get('attention_backend'))}_seed{final['seed']}"

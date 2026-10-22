@@ -9,6 +9,7 @@ from pathlib import Path
 import torch
 
 from minilm_lab.data import load_text, make_batch, split_tokens
+from minilm_lab.identity import checkpoint_identity
 from minilm_lab.metrics import evaluate_tokens
 from minilm_lab.model import (
     ATTENTION_BACKENDS,
@@ -25,7 +26,7 @@ def choose_device() -> str:
     return "mps" if torch.backends.mps.is_available() else "cpu"
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("text", type=Path)
     parser.add_argument("--steps", type=int, default=100)
@@ -47,6 +48,11 @@ def main() -> None:
         help="sdpa (default); mha reproduces science-v1 results ('auto' is its legacy name); reference is the explicit implementation",
     )
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts"))
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
     args = parser.parse_args()
     args.attention_backend = canonical_backend(args.attention_backend)
     if args.steps < 1 or args.eval_interval < 1 or args.gradient_accumulation_steps < 1:
@@ -117,8 +123,15 @@ def main() -> None:
             print(f"step={step + 1:04d} train_loss={train_loss:.4f} val_loss={validation_loss:.4f} val_ppl={evaluation['perplexity']:.2f} device={device}", flush=True)
             if validation_loss < best_validation_loss:
                 best_validation_loss = validation_loss
-                torch.save({"model": model.state_dict(), "config": config.__dict__, "metrics": metrics, "best_validation_loss": best_validation_loss, "step": step + 1, "seed": args.seed, "corpus_sha256": corpus_sha256, "tokenizer": str(args.tokenizer) if args.tokenizer else "byte", "attention_backend": args.attention_backend}, args.output_dir / "best_checkpoint.pt")
-    torch.save({"model": model.state_dict(), "config": config.__dict__, "optimizer": optimizer.state_dict(), "rng_state": torch.get_rng_state(), "metrics": metrics, "best_validation_loss": best_validation_loss, "step": start_step + args.steps, "seed": args.seed, "corpus_sha256": corpus_sha256, "tokenizer": str(args.tokenizer) if args.tokenizer else "byte", "attention_backend": args.attention_backend}, output)
+                best = {"model": model.state_dict(), "config": config.__dict__, "metrics": metrics, "best_validation_loss": best_validation_loss, "step": step + 1, "seed": args.seed, "corpus_sha256": corpus_sha256, "tokenizer": str(args.tokenizer) if args.tokenizer else "byte", "attention_backend": args.attention_backend}
+                # File bytes vary with timing metadata; model_identity does not.
+                if not args.tokenizer:
+                    best["model_identity"] = checkpoint_identity(best)
+                torch.save(best, args.output_dir / "best_checkpoint.pt")
+    final = {"model": model.state_dict(), "config": config.__dict__, "optimizer": optimizer.state_dict(), "rng_state": torch.get_rng_state(), "metrics": metrics, "best_validation_loss": best_validation_loss, "step": start_step + args.steps, "seed": args.seed, "corpus_sha256": corpus_sha256, "tokenizer": str(args.tokenizer) if args.tokenizer else "byte", "attention_backend": args.attention_backend}
+    if not args.tokenizer:
+        final["model_identity"] = checkpoint_identity(final)
+    torch.save(final, output)
     (args.output_dir / "metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
     # Timing and memory of this process only (a resumed run reports its own segment).
     summary = {
@@ -130,6 +143,11 @@ def main() -> None:
         "train_tokens_per_second": train_tokens / train_seconds,
         "eval_seconds": eval_seconds,
         "process_peak_rss_bytes": peak_rss_bytes(),
+        # Identity-relevant training hyperparameters (record schema v2).
+        "hyperparameters": {
+            "steps": args.steps, "batch_size": args.batch_size, "gradient_accumulation_steps": args.gradient_accumulation_steps,
+            "eval_interval": args.eval_interval, "learning_rate": 3e-4, "optimizer": "AdamW", "device": device,
+        },
     }
     (args.output_dir / "run_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(f"saved {output}")

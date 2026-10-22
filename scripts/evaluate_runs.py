@@ -17,6 +17,7 @@ from pathlib import Path
 
 import torch
 
+from minilm_lab.identity import checkpoint_identity
 from minilm_lab.metrics import evaluate_tokens
 from minilm_lab.model import MiniLM, MiniLMConfig, canonical_backend
 from minilm_lab.provenance import environment, file_sha256, synchronize, write_record
@@ -58,6 +59,7 @@ def main() -> None:
             "selected_step": checkpoint["step"],
             "selected_on": "validation loss (during training)",
             "checkpoint_sha256": file_sha256(path),
+            "model_identity_sha256": checkpoint_identity(checkpoint)["sha256"],
             "corpus_sha256": checkpoint.get("corpus_sha256"),
             "training": json.loads(summary_path.read_text()) if summary_path.exists() else None,
             "splits": {},
