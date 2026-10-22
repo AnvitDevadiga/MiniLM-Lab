@@ -14,6 +14,7 @@ from pathlib import Path
 
 import numpy
 import torch
+from torch.utils._python_dispatch import TorchDispatchMode
 
 ROOT = Path(__file__).resolve().parents[2]
 # 1: original schema. 2: training/evaluation records carry deterministic model
@@ -75,6 +76,47 @@ def peak_rss_bytes() -> int:
     """Process lifetime peak resident set size (macOS reports bytes, Linux KiB)."""
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return peak if sys.platform == "darwin" else peak * 1024
+
+
+class PeakAllocated(TorchDispatchMode):
+    """Sample the MPS allocator's live bytes after every aten op (forward and backward)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.peak = torch.mps.current_allocated_memory()
+
+    def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+        output = func(*args, **(kwargs or {}))
+        self.peak = max(self.peak, torch.mps.current_allocated_memory())
+        return output
+
+
+def measure_peak_memory(device: str, operation) -> tuple[int, str]:
+    """Extra memory used by operation() and how it was measured.
+
+    cuda: device allocator peak (torch.cuda.max_memory_allocated) minus allocation before.
+    mps: live allocator bytes sampled after every op minus allocation before.
+    cpu: process peak-RSS delta (host memory; includes allocator caching).
+    Host RSS is never reported for an accelerator.
+    """
+    synchronize(device)
+    if device == "cuda":
+        torch.cuda.reset_peak_memory_stats()
+        before = torch.cuda.memory_allocated()
+        operation()
+        synchronize(device)
+        return torch.cuda.max_memory_allocated() - before, "cuda_max_memory_allocated_delta"
+    if device == "mps":
+        before = torch.mps.current_allocated_memory()
+        with PeakAllocated() as tracker:
+            operation()
+        synchronize(device)
+        return tracker.peak - before, "mps_live_allocated_peak_per_op"
+    if device != "cpu":
+        raise ValueError(f"no peak-memory method for device {device!r}")
+    before = peak_rss_bytes()
+    operation()
+    return peak_rss_bytes() - before, "process_peak_rss_delta"
 
 
 def summarize(samples: list[float]) -> dict:

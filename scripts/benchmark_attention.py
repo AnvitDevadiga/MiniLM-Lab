@@ -21,12 +21,11 @@ import time
 from pathlib import Path
 
 import torch
-from torch.utils._python_dispatch import TorchDispatchMode
 
 from minilm_lab.model import MiniLM, MiniLMConfig
 from minilm_lab.provenance import (
     environment,
-    peak_rss_bytes,
+    measure_peak_memory,
     summarize,
     synchronize,
     write_record,
@@ -80,44 +79,14 @@ def trial(model: MiniLM, prompt: torch.Tensor, decode_tokens: int, device: str, 
     return sample
 
 
-class PeakAllocated(TorchDispatchMode):
-    """Sample the device allocator's live bytes after every aten op."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.peak = torch.mps.current_allocated_memory()
-
-    def __torch_dispatch__(self, func, types, args=(), kwargs=None):
-        output = func(*args, **(kwargs or {}))
-        self.peak = max(self.peak, torch.mps.current_allocated_memory())
-        return output
-
-
 @torch.inference_mode()
 def memory_probe(args) -> None:
     """Run one forward pass in this fresh process and print peak extra memory."""
     model = build(args, args.context_length).set_attention_backend(args.backends[0])
     prompt = inputs(args, args.batch_sizes[0], args.seq_lens[0])
-    synchronize(args.device)
-    if args.device == "mps":
-        # The MPS driver grows in ~1 GiB heaps, so pool size is too coarse.
-        # Live allocator bytes sampled per op give the tensor-level peak.
-        before = torch.mps.current_allocated_memory()
-        with PeakAllocated() as tracker:
-            model(prompt)
-        synchronize(args.device)
-        after, method = tracker.peak, "mps_live_allocated_peak_per_op"
-    elif args.device == "cuda":
-        torch.cuda.reset_peak_memory_stats()
-        before = torch.cuda.memory_allocated()
-        model(prompt)
-        synchronize(args.device)
-        after, method = torch.cuda.max_memory_allocated(), "cuda_max_memory_allocated"
-    else:
-        before = peak_rss_bytes()
-        model(prompt)
-        after, method = peak_rss_bytes(), "process_peak_rss_delta"
-    print(json.dumps({"peak_extra_bytes": after - before, "method": method}))
+    # MPS: the driver grows in ~1 GiB heaps, so live allocator bytes are sampled per op.
+    extra, method = measure_peak_memory(args.device, lambda: model(prompt))
+    print(json.dumps({"peak_extra_bytes": extra, "method": method}))
 
 
 def measure_memory(args, backend: str, batch: int, length: int) -> dict:

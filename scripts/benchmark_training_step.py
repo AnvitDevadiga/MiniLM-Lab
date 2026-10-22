@@ -4,9 +4,10 @@ One step = forward + cross-entropy + backward + AdamW update on a batch of
 random tokens. All backends share the same seeded initial weights and the
 same batches; each backend has its own model copy and optimizer so the
 weights stay comparable. Backend order rotates every repeat. Peak memory is
-measured on the first step in a fresh process per configuration (CPU: peak
-RSS delta; MPS: live allocator bytes sampled after every op, including
-backward); both include AdamW state allocation, which is identical across backends.
+measured on the first step in a fresh process per configuration with
+provenance.measure_peak_memory (CPU: host peak-RSS delta; MPS: live allocator
+bytes sampled after every op, including backward; CUDA: device allocator peak);
+all include AdamW state allocation, which is identical across backends.
 """
 
 import argparse
@@ -18,12 +19,11 @@ import time
 from pathlib import Path
 
 import torch
-from torch.utils._python_dispatch import TorchDispatchMode
 
 from minilm_lab.model import MiniLM, MiniLMConfig
 from minilm_lab.provenance import (
     environment,
-    peak_rss_bytes,
+    measure_peak_memory,
     summarize,
     synchronize,
     write_record,
@@ -56,17 +56,6 @@ def step(model: MiniLM, optimizer: torch.optim.Optimizer, inputs: torch.Tensor, 
     return loss.item()
 
 
-class PeakAllocated(TorchDispatchMode):
-    def __init__(self) -> None:
-        super().__init__()
-        self.peak = torch.mps.current_allocated_memory()
-
-    def __torch_dispatch__(self, func, types, args=(), kwargs=None):
-        output = func(*args, **(kwargs or {}))
-        self.peak = max(self.peak, torch.mps.current_allocated_memory())
-        return output
-
-
 def memory_probe(args) -> None:
     length = args.seq_lens[0]
     model = build(args, length).set_attention_backend(args.backends[0])
@@ -74,18 +63,8 @@ def memory_probe(args) -> None:
     # The first step is measured: a warm-up step would already set the process
     # RSS high-water mark. It includes AdamW state allocation (same for all backends).
     inputs, targets = batch_for(args, length, 0)
-    synchronize(args.device)
-    if args.device == "mps":
-        before = torch.mps.current_allocated_memory()
-        with PeakAllocated() as tracker:
-            step(model, optimizer, inputs, targets)
-        synchronize(args.device)
-        after, method = tracker.peak, "mps_live_allocated_peak_per_op"
-    else:
-        before = peak_rss_bytes()
-        step(model, optimizer, inputs, targets)
-        after, method = peak_rss_bytes(), "process_peak_rss_delta"
-    print(json.dumps({"peak_extra_bytes": after - before, "method": method}))
+    extra, method = measure_peak_memory(args.device, lambda: step(model, optimizer, inputs, targets))
+    print(json.dumps({"peak_extra_bytes": extra, "method": method}))
 
 
 def main() -> None:
