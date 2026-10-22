@@ -106,9 +106,10 @@ backend remains selectable but did not produce any published training result.
   and loss in float64, but RMSNorm variance and RoPE angles are computed in float32 even for float64 inputs. Perplexity uses the repository's
   non-overlapping 128-token chunking, with loss computed in fp32.
 - **Provenance.** Every table joins evaluations to training runs by checkpoint SHA-256
-  (and model identity where recorded or attested), checks seeds, backends, protocols
-  and dataset hashes, and refuses to build on any conflict; see
-  [RECORD_SCHEMA.md](RECORD_SCHEMA.md).
+  and resolved model identity, checks seeds, backends, protocols and dataset hashes,
+  and refuses to build on any conflict or on model identities that are only
+  metadata-consistent. KV-cache speedups are derived from the timing samples, never
+  read from stored ratio fields. See [RECORD_SCHEMA.md](RECORD_SCHEMA.md).
 - **Training comparison.** Identical command, data, seeds and hardware (CPU, fp32);
   only `--attention-backend` differs; backend order alternates per seed. Default-path
   checkpoints are bitwise identical to the original v1 runs.

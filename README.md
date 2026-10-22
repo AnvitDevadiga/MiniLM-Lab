@@ -52,7 +52,8 @@ source .venv/bin/activate
 python -m pip install -r requirements/release-lock.txt
 python -m pip install -e . --no-deps
 make check                                   # ruff + full test suite
-python scripts/validate_records.py           # provenance of every experiment record
+python scripts/validate_records.py --strict  # provenance of every record; identities verified
+./scripts/verify_release.sh                  # lint, tests, strict validation, report drift
 ```
 
 **Legacy v1 result (published 17.58).** v1 commands select the legacy `mha` backend explicitly. On an M4 CPU training takes about two minutes and reproduces the published run bit-for-bit with torch 2.14.
@@ -78,7 +79,7 @@ python scripts/benchmark_training_step.py --device cpu    # also --device mps
 python scripts/build_experiment_report.py                 # regenerate tables and figures from records
 ```
 
-Checkpoints are not committed (`artifacts/` is ignored). Each training record stores the exact command, seed, data hashes and the checkpoint file's SHA-256. A regenerated checkpoint file does **not** reproduce that file hash, because checkpoints embed elapsed seconds. Check a regenerated model with its deterministic model identity instead (`minilm_lab.identity`, scheme `minilm-model-identity/v1`), which new records store and [identity attestations](experiments/records/identity/) provide for historical runs. Example: the retrained v1 seed-42 checkpoint has a different file hash but the same model identity. Equality is only expected on the same device type and library versions; elsewhere, compare numbers within the tolerances listed in [the release checklist](docs/RELEASE_CHECKLIST.md). Record rules: [docs/RECORD_SCHEMA.md](docs/RECORD_SCHEMA.md).
+Checkpoints are not committed (`artifacts/` is ignored). Each training record stores the exact command, seed, data hashes and the checkpoint file's SHA-256. A regenerated checkpoint file does **not** reproduce that file hash, because checkpoints embed elapsed seconds. Check a regenerated model with its deterministic model identity instead (`minilm_lab.identity`, scheme `minilm-model-identity/v1`). Historical identities are anchored by an [audited baseline](experiments/baselines/model_identity_baseline.json) built from the original checkpoint files and pinned by hash in code. Without the checkpoints, strict validation therefore reports them as `trusted_baseline_verified`, not artifact-verified. This is a reviewable integrity anchor, not a cryptographic signature. Example: the retrained v1 seed-42 checkpoint has a different file hash but the same model identity. Equality is only expected on the same device type and library versions; elsewhere, compare numbers within the tolerances listed in [the release checklist](docs/RELEASE_CHECKLIST.md). Record rules: [docs/RECORD_SCHEMA.md](docs/RECORD_SCHEMA.md).
 
 The committed v1 corpus is authoritative. `python scripts/prepare_science_corpus.py --output-dir /tmp/v1` regenerates it from Project Gutenberg and refuses to write unless every split matches the published hashes. As of October 2026 it does, although the Darwin file's header has changed upstream.
 
