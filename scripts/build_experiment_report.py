@@ -11,6 +11,9 @@ import math
 import re
 from pathlib import Path
 
+from minilm_lab.model import canonical_backend
+from minilm_lab.records import NAME, load_store, protocol_rows, validate_store
+
 ROOT = Path(__file__).resolve().parents[1]
 RECORDS = ROOT / "experiments/records"
 REPORT = ROOT / "docs/EXPERIMENT_RESULTS.md"
@@ -24,29 +27,21 @@ BACKEND_LABEL = {"mha": "MHA (legacy v1)", "sdpa": "SDPA", "reference": "Referen
 
 def canon(backend: str | None) -> str:
     """Records written before the first release name the legacy MHA path 'auto'."""
-    return {"auto": "mha", None: "mha"}.get(backend, backend)
+    return canonical_backend(backend)
 # Drawn dashed (and last) so a series that coincides with another stays visible.
 DASHED = {"MHA (legacy v1)"}
 TARGET_ORDER = ("cpu/float32", "mps/float32", "mps/float16", "mps/bfloat16")
 
 
-def superseded() -> set[str]:
-    index = RECORDS / "SUPERSEDED.json"
-    return {str(RECORDS / p) for p in json.loads(index.read_text())["records"]} if index.exists() else set()
-
-
-def current_records(directory: Path) -> list[Path]:
+def current_records(directory: Path) -> list[dict]:
     """Records in time order, excluding superseded ones (which stay on disk)."""
-    skip = superseded()
-    return [path for path in sorted(directory.glob("*.json")) if str(path) not in skip]
+    return [record for _, record in load_store(ROOT, directory.parent).current(directory.name)]
 
 
 def latest(directory: Path) -> dict[str, dict]:
-    """Latest record per device/dtype; earlier records stay on disk untouched."""
+    """Latest current benchmark record per device/dtype (benchmarks are re-measurements)."""
     chosen = {}
-    for path in current_records(directory):
-        record = json.loads(path.read_text(encoding="utf-8"))
-        record["_path"] = str(path.relative_to(ROOT))
+    for record in current_records(directory):
         key = f"{record['environment']['device']}/{record['settings'].get('dtype', 'mixed')}"
         chosen[key] = record
     return dict(sorted(chosen.items(), key=lambda item: TARGET_ORDER.index(item[0]) if item[0] in TARGET_ORDER else 99))
@@ -304,13 +299,8 @@ def figures(records: dict[str, dict]) -> list[tuple[str, str]]:
 
 
 def latest_by_name(directory: Path) -> dict[str, dict]:
-    """Latest record per record name (the part between timestamp and commit)."""
-    chosen = {}
-    for path in current_records(directory):
-        record = json.loads(path.read_text(encoding="utf-8"))
-        record["_path"] = str(path.relative_to(ROOT))
-        chosen[path.stem.split("_", 1)[1].rsplit("_", 1)[0]] = record
-    return chosen
+    """Latest current record per record name (the part between timestamp and commit)."""
+    return {NAME.match(Path(record["_key"]).name)["name"]: record for record in current_records(directory)}
 
 
 def mean_sd(values: list[float]) -> str:
@@ -364,24 +354,6 @@ def kv_memory_table(records: dict[str, dict]) -> str:
                 peak = f"{step['step_peak_minus_start_bytes'] / 2**20:.2f} MiB" if "step_peak_minus_start_bytes" in step else "–"
                 lines.append(f"| {key} | {growth['batch']} | {step['cached_positions']} | {step['cache_bytes'] / 2**20:.2f} MiB | {per:.0f} | {peak} |")
     return "\n".join(lines)
-
-
-def training_rows(training: dict[str, dict], evaluations: dict[str, dict], protocol: str, eval_names: list[str]) -> list[dict]:
-    rows = []
-    for record in training.values():
-        settings = record["settings"]
-        if settings.get("protocol") != protocol or not record["results"].get("run_summary"):
-            continue
-        run = record["results"]["run_summary"]
-        row = {"seed": settings["seed"], "backend": canon(settings["attention_backend"]), "best_step": record["results"]["best_step"],
-               "tokens_per_second": run["train_tokens_per_second"], "train_seconds": run["train_seconds"],
-               "peak_rss_mib": run["process_peak_rss_bytes"] / 2**20, "record": record["_path"]}
-        for name in eval_names:
-            for result in evaluations.get(name, {}).get("results", []):
-                if result["seed"] == row["seed"] and canon(result["attention_backend"]) == row["backend"]:
-                    row[name] = result["splits"]
-        rows.append(row)
-    return sorted(rows, key=lambda r: (r["seed"], r["backend"]))
 
 
 def sdpa_training_table(rows: list[dict]) -> str:
@@ -498,6 +470,11 @@ def replace_section(text: str, name: str, content: str) -> str:
 
 
 def main() -> None:
+    problems = validate_store(load_store(ROOT, RECORDS))
+    if problems:
+        # Fail closed: never report from records with unresolved provenance problems.
+        raise SystemExit("records failed validation (run scripts/validate_records.py):\n" + "\n".join(problems))
+    store = load_store(ROOT, RECORDS)
     speed = latest(RECORDS / "attention")
     quality = latest(RECORDS / "attention_quality")
     if not speed:
@@ -519,18 +496,16 @@ def main() -> None:
         sections["kv_memory"] = kv_memory_table(kv)
         sections["environment"] = environment_table(list(speed.values()) + list(quality.values()) + list(kv.values()))
         extra_figures.append(kv_figure(kv))
-    training = latest_by_name(RECORDS / "training") if (RECORDS / "training").exists() else {}
-    evaluations = latest_by_name(RECORDS / "evaluation") if (RECORDS / "evaluation").exists() else {}
     step_records = latest(RECORDS / "training_step") if (RECORDS / "training_step").exists() else {}
     if step_records:
         sections["training_step"] = training_step_table(step_records)
-    v1_rows = training_rows(training, evaluations, "science-v1", ["sdpa_v1_eval_cpu", "sdpa_v1_eval_mps"])
+    v1_rows = protocol_rows(store, "science-v1", ["sdpa_v1_eval_cpu", "sdpa_v1_eval_mps"])
     if v1_rows:
         sections["sdpa_training"] = sdpa_training_table(v1_rows)
     v2_manifest = ROOT / "data/science-v2/manifest.json"
     if v2_manifest.exists():
         sections["v2_corpus"] = v2_corpus_table(json.loads(v2_manifest.read_text(encoding="utf-8")))
-    v2_rows = training_rows(training, evaluations, "science-v2", ["v2_final_cpu"])
+    v2_rows = protocol_rows(store, "science-v2", ["v2_final_cpu"])
     if any("v2_final_cpu" in row for row in v2_rows):
         sections["v2_results"] = v2_table(v2_rows)
     text = REPORT.read_text(encoding="utf-8")
