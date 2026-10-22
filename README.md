@@ -28,6 +28,16 @@ Weight-only INT8 reduced stored model tensors by **53.6%**, but the reference im
 
 These are **one-seed CPU measurements**, not M4/MPS results or claims of general language ability. The training corpus is about **1 MB**. [Read the report, including limitations](docs/research_report.md) or inspect the [raw measured record](docs/data/science_run.json).
 
+### Attention implementation and reproducibility study (October 2026)
+
+The published run reproduces bit-for-bit on CPU. Retraining with seeds 42, 43 and 44 gives held-out perplexity **17.58, 18.99 and 21.07** (mean 19.21 ± 1.75). The published 17.58 is the best of the three, so read it as optimistic.
+
+The same weights were run through three attention implementations: the default `nn.MultiheadAttention` path, PyTorch scaled-dot-product attention (SDPA), and an explicit reference. In float32 they give identical perplexity, top-1 predictions and greedy text on CPU and Apple M4 MPS. SDPA was 3.4–5.4× faster than the reference at 2,048 tokens and used 8–22× less memory. On CPU, the repository's default attention path is nearly as slow as the reference.
+
+![SDPA speedup](docs/figures/attention_speedup.svg)
+
+Measured on one M4 MacBook (CPU and MPS). CUDA is untested. [Full tables, method and limitations](docs/EXPERIMENT_RESULTS.md) · [audit with evidence per claim](docs/implementation_audit.md) · [raw records](experiments/records/).
+
 ## Reproduce on a MacBook Air
 
 You need Python 3.12 and the ability to install PyTorch. The commands below run the checks, prepare the pinned corpus, train the small model, and score the held-out text. Training time varies by device.
@@ -57,13 +67,15 @@ Training chooses Apple MPS when available and otherwise runs on CPU. The publish
 | Decoder | causal multi-head attention, learned positions or RoPE, RMSNorm, SwiGLU, tied token/output embeddings |
 | Training | AdamW, true optimizer-step accumulation, deterministic full-split checkpoint selection, resume with optimizer and RNG state |
 | Evaluation | every held-out next token scored once; perplexity and bits per byte |
-| Generation | temperature, top-k, top-p; KV cache with sliding-window refresh |
-| Experiments | repeated decode benchmark; portable MLP weight-only INT8 comparison; LoRA linear building block |
+| Generation | temperature, top-k, top-p; KV cache with sliding-window refresh; greedy decoding verified token-identical with and without cache |
+| Experiments | attention backend comparison (MHA / SDPA / reference) on CPU and MPS; repeated decode benchmark; portable MLP weight-only INT8 comparison; LoRA linear building block |
+| Reproducibility | append-only JSON records with device, versions, git commit, seeds, data hashes and raw timing samples (`experiments/records/`) |
 
 PyTorch provides tensor operations, automatic differentiation, multi-head attention and SDPA. The project exposes the model and systems decisions around those primitives. It is not a claim to reimplement an entire deep-learning framework.
 
 ## Read the evidence
 
+- [Experiment results: attention backends, seeds (Oct 2026)](docs/EXPERIMENT_RESULTS.md)
 - [Research paper (PDF)](output/pdf/MiniLM-Lab-Research-Paper.pdf)
 - [Research report](docs/research_report.md)
 - [Raw science run record](docs/data/science_run.json)
@@ -77,7 +89,12 @@ The research paper is generated from the tracked results and benchmark protocol 
 \`python -m pip install -e '.[report]'\` followed by
 \`python scripts/build_research_report.py\`.
 
-## Scope
+## Scope and limitations
+
+- Quality numbers come from 1,000 optimizer steps. Every seed spends most of that time near unigram-level loss, so the model is under-trained and seed-sensitive.
+- 26% of held-out bytes are the alphabetical index of *On the Origin of Species*. The validation split also selects the best checkpoint; there is no untouched test split.
+- Timings come from one laptop and one session per record. MPS conclusions apply to this tiny model, where kernel-launch overhead dominates, and may not hold at larger scale.
+- The PDF paper and the first README figures predate the October 2026 study and are not regenerated from it.
 
 The corpus contains about 1 MB of training text. The model is a controlled educational system for studying language-model mechanics and inference trade-offs. Generated text should not be treated as reliable scientific information.
 
