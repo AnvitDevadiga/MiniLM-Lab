@@ -1,0 +1,129 @@
+{
+  "record_version": 1,
+  "created_utc": "20261022T041103Z",
+  "experiment": "training",
+  "environment": {
+    "python": "3.12.14",
+    "torch": "2.14.1",
+    "numpy": "2.5.4",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "processor": "Apple M4",
+    "memory_bytes": 17179869184,
+    "cpu_count": 10,
+    "torch_threads": 4,
+    "device": "cpu",
+    "mps_available": true,
+    "cuda_available": false,
+    "git": {
+      "commit": "48e95f8ea09889e6875fb6129026662f8a699cdb",
+      "branch": "experiments/sdpa-training-v2",
+      "dirty": false
+    },
+    "command": "python scripts/record_training_run.py artifacts/runs/sdpa-v1/auto-s43 --protocol science-v1 --code-commit 48e95f8 --training-command 'python scripts/train_tiny.py data/science/train.txt --validation-text data/science/validation.txt --steps 1000 --eval-interval 250 --gradient-accumulation-steps 4 --device cpu --seed 43 --attention-backend auto --output-dir artifacts/runs/sdpa-v1/auto-s43' --note 'SDPA matched experiment (v1 corpus)'"
+  },
+  "settings": {
+    "dtype": "float32",
+    "seed": 43,
+    "protocol": "science-v1",
+    "attention_backend": "auto",
+    "model_config": {
+      "vocab_size": 256,
+      "context_length": 128,
+      "embedding_dim": 192,
+      "num_layers": 4,
+      "num_heads": 6,
+      "dropout": 0.0,
+      "positional_encoding": "learned",
+      "norm": "rmsnorm",
+      "activation": "swiglu",
+      "rope_theta": 10000.0
+    },
+    "tokenizer": "byte",
+    "optimizer": "AdamW lr=3e-4 (scripts/train_tiny.py defaults)",
+    "steps": 1000,
+    "training_command": "python scripts/train_tiny.py data/science/train.txt --validation-text data/science/validation.txt --steps 1000 --eval-interval 250 --gradient-accumulation-steps 4 --device cpu --seed 43 --attention-backend auto --output-dir artifacts/runs/sdpa-v1/auto-s43",
+    "training_code_commit": "48e95f8",
+    "note": "SDPA matched experiment (v1 corpus)",
+    "data": {
+      "train": {
+        "path": "data/science/train.txt",
+        "sha256": "19c057053f222c3084fba3693c1c295ea94f6cda1ee5fbf5f917953fcb91ef00"
+      },
+      "validation": {
+        "path": "data/science/validation.txt",
+        "sha256": "e25d4e45706bbf4251129dbb079f3487660c453cf8b34407901350538b23e2e7"
+      },
+      "corpus_sha256_in_checkpoint": "f6642de41672b3cac70017cd5f02312975c0bedfa32be8e79056cf36a48e943f",
+      "manifest_path": "data/science/manifest.json",
+      "manifest_sha256": "bc001b3366d192ab3c5de6b7e4e71801b0c3bba70029c5a954dbb6af661f8af9"
+    }
+  },
+  "results": {
+    "metrics": [
+      {
+        "step": 250,
+        "train_loss": 3.125346601009369,
+        "validation_loss": 3.27685190798933,
+        "perplexity": 26.49224127345457,
+        "bits_per_token": 4.727497997383744,
+        "validation_tokens": 112111,
+        "elapsed_seconds": 35.971077292007976,
+        "train_seconds": 34.02679004802485,
+        "eval_seconds": 1.9438253749976866
+      },
+      {
+        "step": 500,
+        "train_loss": 3.1471182703971863,
+        "validation_loss": 3.2741675599209956,
+        "perplexity": 26.42122223931517,
+        "bits_per_token": 4.723625301737538,
+        "validation_tokens": 112111,
+        "elapsed_seconds": 72.10287125001196,
+        "train_seconds": 68.14442900904396,
+        "eval_seconds": 2.0082519999996293
+      },
+      {
+        "step": 750,
+        "train_loss": 3.054605782032013,
+        "validation_loss": 3.271949987806797,
+        "perplexity": 26.36269619050522,
+        "bits_per_token": 4.72042602144557,
+        "validation_tokens": 112111,
+        "elapsed_seconds": 110.50238375000481,
+        "train_seconds": 104.46415100306331,
+        "eval_seconds": 2.0738366250006948
+      },
+      {
+        "step": 1000,
+        "train_loss": 2.851951539516449,
+        "validation_loss": 2.9438789420007883,
+        "perplexity": 18.989362272891913,
+        "bits_per_token": 4.247119550601986,
+        "validation_tokens": 112111,
+        "elapsed_seconds": 147.99201750000066,
+        "train_seconds": 139.8997420352389,
+        "eval_seconds": 2.048635250001098
+      }
+    ],
+    "best_step": 1000,
+    "best_validation_loss": 2.9438789420007883,
+    "best_checkpoint_sha256": "e2285dfc79e7aa1d430cac7720bc5997139210fef876055c23da375aab24b04c",
+    "final_checkpoint_sha256": "c9a217ad9a778171738c115cd23a3b271957fb570f7990e616d5444e7baed976",
+    "run_summary": {
+      "attention_backend": "auto",
+      "device": "cpu",
+      "steps": 1000,
+      "train_seconds": 139.8997420352389,
+      "train_tokens": 4096000,
+      "train_tokens_per_second": 29278.10974067609,
+      "eval_seconds": [
+        1.9438253749976866,
+        2.0082519999996293,
+        2.0738366250006948,
+        2.048635250001098
+      ],
+      "process_peak_rss_bytes": 470466560
+    }
+  }
+}

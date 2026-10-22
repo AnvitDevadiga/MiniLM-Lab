@@ -1,0 +1,65 @@
+{
+  "record_version": 1,
+  "created_utc": "20261022T045414Z",
+  "experiment": "legacy_kv_cache_benchmark",
+  "environment": {
+    "python": "3.12.14",
+    "torch": "2.14.1",
+    "numpy": "2.5.4",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "processor": "Apple M4",
+    "memory_bytes": 17179869184,
+    "cpu_count": 10,
+    "torch_threads": 4,
+    "device": "cpu",
+    "mps_available": true,
+    "cuda_available": false,
+    "git": {
+      "commit": "13530f436d5b9b9b1e3480fd33d4dc6891c0cf28",
+      "branch": "experiments/sdpa-training-v2",
+      "dirty": true
+    },
+    "command": "python scripts/benchmark_kv_cache.py --checkpoint artifacts/runs/sdpa-v1/auto-s42/best_checkpoint.pt --tokens 96 --device cpu --attention-backend mha --record-dir experiments/records/legacy"
+  },
+  "settings": {
+    "checkpoint": "artifacts/runs/sdpa-v1/auto-s42/best_checkpoint.pt",
+    "checkpoint_sha256": "23f0aa813704e0cfc02d0780386fe76d1ee26f70aaa674ce83a849a85fb93546",
+    "tokens": 96,
+    "repeats": 7,
+    "warmup": 1,
+    "seed": 1234,
+    "attention_backend": "mha"
+  },
+  "results": {
+    "device": "cpu",
+    "attention_backend": "mha",
+    "generated_tokens": 96,
+    "repeats": 7,
+    "warmup_runs_per_mode": 1,
+    "prompt_tokens": 21,
+    "uncached_seconds_samples": [
+      0.12532191700302064,
+      0.12442887500219513,
+      0.12452837500313763,
+      0.12378300000273157,
+      0.12726129200018477,
+      0.12416158399719279,
+      0.14033087500138208
+    ],
+    "cached_seconds_samples": [
+      0.03586633400118444,
+      0.0355714579927735,
+      0.03620683400367852,
+      0.03698012499080505,
+      0.03613904099620413,
+      0.03671716600365471,
+      0.03586041700327769
+    ],
+    "uncached_seconds": 0.12452837500313763,
+    "cached_seconds": 0.03613904099620413,
+    "uncached_tokens_per_second": 770.9086382728528,
+    "cached_tokens_per_second": 2656.406959168711,
+    "speedup": 3.4458129372115183
+  }
+}

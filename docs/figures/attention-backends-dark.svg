@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="356" viewBox="0 0 760 356" role="img" aria-labelledby="title desc">
+<title id="title">Attention backends</title>
+<desc id="desc">Three interchangeable attention kernels sharing the same weights, and which kernel actually runs for each call path and selected backend.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 10 5 L 0 9 z" fill="#ffffff" stroke="none"/></marker></defs>
+<g fill="#ffffff" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+<rect x="20" y="8" width="220" height="62" rx="3" fill="none"/>
+<text stroke="none" x="130.0" y="24.0" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">SDPA</text>
+<text stroke="none" x="130.0" y="39.0" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">F.scaled_dot_product_attention</text>
+<text stroke="none" x="130.0" y="54.0" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">is_causal, or a bottom-right mask</text>
+<rect x="270" y="8" width="220" height="62" rx="3" fill="none"/>
+<text stroke="none" x="380.0" y="24.0" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">nn.MultiheadAttention</text>
+<text stroke="none" x="380.0" y="39.0" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">explicit boolean causal mask</text>
+<text stroke="none" x="380.0" y="54.0" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">projections inside the module</text>
+<rect x="520" y="8" width="220" height="62" rx="3" fill="none"/>
+<text stroke="none" x="630.0" y="24.0" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">Reference</text>
+<text stroke="none" x="630.0" y="39.0" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">softmax(QKᵀ / √d) · V</text>
+<text stroke="none" x="630.0" y="54.0" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">T × T scores, softmax ≥ float32</text>
+<rect x="20" y="84" width="720" height="30" rx="3" fill="none"/>
+<text stroke="none" x="380" y="99" font-size="12" font-weight="400" text-anchor="middle" dominant-baseline="central">Shared weights:  in_proj 192 → 576  ·  out_proj 192 → 192  ·  6 heads × 32</text>
+<text stroke="none" x="20" y="144" font-size="12" font-weight="500" text-anchor="start" dominant-baseline="central">Kernel that runs, by call path (rows) and selected backend (columns)</text>
+<path d="M 20 160 L 740 160 M 20 190 L 740 190 M 20 280 L 740 280" fill="none"/>
+<text stroke="none" x="28" y="175.0" font-size="12" font-weight="500" text-anchor="start" dominant-baseline="central">call path</text>
+<text stroke="none" x="330.0" y="175.0" font-size="12" font-weight="500" text-anchor="middle" dominant-baseline="central">sdpa (default)</text>
+<text stroke="none" x="495.0" y="175.0" font-size="12" font-weight="500" text-anchor="middle" dominant-baseline="central">mha (legacy v1)</text>
+<text stroke="none" x="660.0" y="175.0" font-size="12" font-weight="500" text-anchor="middle" dominant-baseline="central">reference</text>
+<text stroke="none" x="28" y="205.0" font-size="12" font-weight="400" text-anchor="start" dominant-baseline="central" fill-opacity="0.68">forward, learned positions</text>
+<text stroke="none" x="330.0" y="205.0" font-size="12" font-weight="400" text-anchor="middle" dominant-baseline="central">SDPA</text>
+<text stroke="none" x="495.0" y="205.0" font-size="12" font-weight="400" text-anchor="middle" dominant-baseline="central">nn.MultiheadAttention</text>
+<text stroke="none" x="660.0" y="205.0" font-size="12" font-weight="400" text-anchor="middle" dominant-baseline="central">Reference</text>
+<text stroke="none" x="28" y="235.0" font-size="12" font-weight="400" text-anchor="start" dominant-baseline="central" fill-opacity="0.68">forward, RoPE</text>
+<text stroke="none" x="330.0" y="235.0" font-size="12" font-weight="400" text-anchor="middle" dominant-baseline="central">SDPA</text>
+<text stroke="none" x="495.0" y="235.0" font-size="12" font-weight="400" text-anchor="middle" dominant-baseline="central">SDPA *</text>
+<text stroke="none" x="660.0" y="235.0" font-size="12" font-weight="400" text-anchor="middle" dominant-baseline="central">Reference</text>
+<text stroke="none" x="28" y="265.0" font-size="12" font-weight="400" text-anchor="start" dominant-baseline="central" fill-opacity="0.68">forward_cached (KV cache)</text>
+<text stroke="none" x="330.0" y="265.0" font-size="12" font-weight="400" text-anchor="middle" dominant-baseline="central">SDPA</text>
+<text stroke="none" x="495.0" y="265.0" font-size="12" font-weight="400" text-anchor="middle" dominant-baseline="central">SDPA *</text>
+<text stroke="none" x="660.0" y="265.0" font-size="12" font-weight="400" text-anchor="middle" dominant-baseline="central">Reference</text>
+<text stroke="none" x="20" y="304" font-size="11" font-weight="400" text-anchor="start" dominant-baseline="central" fill-opacity="0.68">* RoPE and the KV cache are implemented only on the explicit Q, K, V path, so mha dispatches to SDPA there.</text>
+<text stroke="none" x="20" y="324" font-size="11" font-weight="400" text-anchor="start" dominant-baseline="central" fill-opacity="0.68">The backend is chosen at run time (set_attention_backend, --attention-backend). It changes no weights</text>
+<text stroke="none" x="20" y="342" font-size="11" font-weight="400" text-anchor="start" dominant-baseline="central" fill-opacity="0.68">and is not part of the model identity.</text>
+</g>
+</svg>

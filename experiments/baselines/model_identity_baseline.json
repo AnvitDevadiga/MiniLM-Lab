@@ -1,0 +1,126 @@
+{
+  "entries": {
+    "02c866b578364f3fcbddb8b7e0f53d5088c0f540ab5ff006b4f821579544c599": {
+      "kind": "final",
+      "model_identity_sha256": "cc7a5dd2af26be2c8c5bd1a550820a4fe44b01684895202a272a75581a885bd6",
+      "training_record": "training/20261022T040834Z_training_science-v1_sdpa_seed43_48e95f8.json"
+    },
+    "0a1357240562d1851b8db80c85e3ce4b4bfd0b00a4c6d9c41ddead928d90c916": {
+      "kind": "best",
+      "model_identity_sha256": "cc7a5dd2af26be2c8c5bd1a550820a4fe44b01684895202a272a75581a885bd6",
+      "training_record": "training/20261022T040834Z_training_science-v1_sdpa_seed43_48e95f8.json"
+    },
+    "1cb3fbca57f10b72d33c945325dfc9ed1335cca02fc2fe07150fae5ba40a4b8e": {
+      "kind": "best",
+      "model_identity_sha256": "7b25516b2cf08abfd68d2a998e1b91963b1b5c0290a09727a14744e6fd7840af",
+      "training_record": "training/20261022T042403Z_training_science-v2_auto_seed42_897db37.json"
+    },
+    "23f0aa813704e0cfc02d0780386fe76d1ee26f70aaa674ce83a849a85fb93546": {
+      "kind": "best",
+      "model_identity_sha256": "c0c6f2995c5b97d331dc976f01a9af2f6cbea0bed3de442bf0d43986242b1425",
+      "training_record": "training/20261022T041654Z_training_science-v1_auto_seed42_48e95f8.json"
+    },
+    "2488847e2e18787df5cbd5dd3000f2405527961878cb1c4a0ee510b7f561c038": {
+      "kind": "best",
+      "model_identity_sha256": "95142ee6b38e36487d76a0d3bf7b021d9a0800efa956b70db9da79b85f9ceab0",
+      "training_record": "training/20261022T043559Z_training_science-v2_sdpa_seed44_897db37.json"
+    },
+    "264b42c669549c77acc92d05c122beedd9ec87b942a077b073fd7758fb3abef9": {
+      "kind": "final",
+      "model_identity_sha256": "cecb5f2ebbcae98441896f1da50d5306ee8e49ef063a2a3217b22e089a935625",
+      "training_record": "training/20261022T042630Z_training_science-v2_sdpa_seed42_897db37.json"
+    },
+    "3451e8577c0a5cd8f5b5cadd7aec3f7fd2d9b72fde24db01e6520f9b083de4a4": {
+      "kind": "best",
+      "model_identity_sha256": "d25ea987563add6fa1a8f53f032a82f4c3d5893c233b6d9cc2802fd1cefae0cc",
+      "training_record": "training/20261022T043119Z_training_science-v2_sdpa_seed43_897db37.json"
+    },
+    "46117ebc02af5b2fe2a5cf6b6301435955f8a865aeef7f30a992e5c33694543c": {
+      "kind": "final",
+      "model_identity_sha256": "242d813f6a59b1b50abeddc211983de28e0fc76ea0dc323ca611a9f9acec4578",
+      "training_record": "training/20261022T042859Z_training_science-v2_auto_seed43_897db37.json"
+    },
+    "4c52fc4c8b32fae5ca82295eb33f4c9331ad699b3b87d3c6d533ff043412b242": {
+      "kind": "final",
+      "model_identity_sha256": "292224766ca70f7501a2ad3b1dbd7b593a7f32ff025ec8ead35c81914bdde2e9",
+      "training_record": "training/20261022T040614Z_training_science-v1_sdpa_seed42_48e95f8.json"
+    },
+    "59dd70bd83b42f3f4075d7f44fbbe162a908c10d8f07c0a831cc13d080c53340": {
+      "kind": "final",
+      "model_identity_sha256": "d25ea987563add6fa1a8f53f032a82f4c3d5893c233b6d9cc2802fd1cefae0cc",
+      "training_record": "training/20261022T043119Z_training_science-v2_sdpa_seed43_897db37.json"
+    },
+    "5de158ff5c205dcf1e06ecce60ad189878d8f0899a7c81e9b4b19145e7628244": {
+      "kind": "final",
+      "model_identity_sha256": "22694540faf7514d97d05b0408f1d7a659d9380bae3822137aa814935a82afbd",
+      "training_record": "training/20261022T041553Z_training_science-v1_sdpa_seed44_48e95f8.json"
+    },
+    "5f25f43bcdd4a01e7bab23978fa15fdf85e650008b93d8a39b7960437885c687": {
+      "kind": "final",
+      "model_identity_sha256": "95142ee6b38e36487d76a0d3bf7b021d9a0800efa956b70db9da79b85f9ceab0",
+      "training_record": "training/20261022T043559Z_training_science-v2_sdpa_seed44_897db37.json"
+    },
+    "6e8b0471016093200fa1a7045e41b4dcb1be07bb0bb742444bd2c19eaa9f2cc2": {
+      "kind": "best",
+      "model_identity_sha256": "cecb5f2ebbcae98441896f1da50d5306ee8e49ef063a2a3217b22e089a935625",
+      "training_record": "training/20261022T042630Z_training_science-v2_sdpa_seed42_897db37.json"
+    },
+    "ad66af927334d8991901682c91a0c1ca539707681a0ba890d7145101ba3c041c": {
+      "kind": "best",
+      "model_identity_sha256": "242d813f6a59b1b50abeddc211983de28e0fc76ea0dc323ca611a9f9acec4578",
+      "training_record": "training/20261022T042859Z_training_science-v2_auto_seed43_897db37.json"
+    },
+    "b1af615e4dc2908a234f45c3c8c48c481f7c2b15294e76abd588f17da9b8763d": {
+      "kind": "final",
+      "model_identity_sha256": "c0c6f2995c5b97d331dc976f01a9af2f6cbea0bed3de442bf0d43986242b1425",
+      "training_record": "training/20261022T041654Z_training_science-v1_auto_seed42_48e95f8.json"
+    },
+    "becaa1b609e62d9591a2cce4cae60e0d158c501db10a7e2edcc5209a1a4ed5ef": {
+      "kind": "final",
+      "model_identity_sha256": "f2546d9a7967994e554618d99394bc4bdd5d718a3d4ec7cee8c99686f59314e8",
+      "training_record": "training/20261022T041335Z_training_science-v1_auto_seed44_48e95f8.json"
+    },
+    "c9a217ad9a778171738c115cd23a3b271957fb570f7990e616d5444e7baed976": {
+      "kind": "final",
+      "model_identity_sha256": "c609dd197aa7bfa285b3a5fe16eb834cbeab4369e5ff512d5ea27ea6c93ff7d6",
+      "training_record": "training/20261022T041103Z_training_science-v1_auto_seed43_48e95f8.json"
+    },
+    "cb77533a909fb6f40f08c3a50854a28765ab214aa87a25a8bb8bc5566211cf40": {
+      "kind": "best",
+      "model_identity_sha256": "6e32612238ffcfd87920db587df899a4a021e5206f50e55dc5f74041a8961062",
+      "training_record": "training/20261022T043349Z_training_science-v2_auto_seed44_897db37.json"
+    },
+    "d4fe3800f75cd1f3b7ef68bfa463dc48f503585e5cd038da8f22b7f67014f794": {
+      "kind": "best",
+      "model_identity_sha256": "f2546d9a7967994e554618d99394bc4bdd5d718a3d4ec7cee8c99686f59314e8",
+      "training_record": "training/20261022T041335Z_training_science-v1_auto_seed44_48e95f8.json"
+    },
+    "de734545979c6a4b9a5d6a21bb0299c8c91ac69c32effbfcaca23a86b7cd1fa0": {
+      "kind": "best",
+      "model_identity_sha256": "292224766ca70f7501a2ad3b1dbd7b593a7f32ff025ec8ead35c81914bdde2e9",
+      "training_record": "training/20261022T040614Z_training_science-v1_sdpa_seed42_48e95f8.json"
+    },
+    "e2285dfc79e7aa1d430cac7720bc5997139210fef876055c23da375aab24b04c": {
+      "kind": "best",
+      "model_identity_sha256": "c609dd197aa7bfa285b3a5fe16eb834cbeab4369e5ff512d5ea27ea6c93ff7d6",
+      "training_record": "training/20261022T041103Z_training_science-v1_auto_seed43_48e95f8.json"
+    },
+    "e7544665b394924f64facd47c731cd2950caa35d0ced5aaa66c77cdeb4034e47": {
+      "kind": "best",
+      "model_identity_sha256": "22694540faf7514d97d05b0408f1d7a659d9380bae3822137aa814935a82afbd",
+      "training_record": "training/20261022T041553Z_training_science-v1_sdpa_seed44_48e95f8.json"
+    },
+    "eeef0fd313c7d9d023674a38ac94c05423bd02c5490937cf05d3bdabadb1b219": {
+      "kind": "final",
+      "model_identity_sha256": "6e32612238ffcfd87920db587df899a4a021e5206f50e55dc5f74041a8961062",
+      "training_record": "training/20261022T043349Z_training_science-v2_auto_seed44_897db37.json"
+    },
+    "f4e18218a9da9670cd647c4baf264ddada9ca50fdb86234721e59292ecaae880": {
+      "kind": "final",
+      "model_identity_sha256": "7b25516b2cf08abfd68d2a998e1b91963b1b5c0290a09727a14744e6fd7840af",
+      "training_record": "training/20261022T042403Z_training_science-v2_auto_seed42_897db37.json"
+    }
+  },
+  "method": "checkpoint bytes hashed and required to equal the training record's SHA-256; model identity recomputed from the checkpoint tensors and configuration",
+  "scheme": "minilm-model-identity/v1"
+}

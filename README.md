@@ -1,84 +1,91 @@
 # MiniLM Lab
 
-**Build a tiny language model. Measure what actually helps.**
+A small decoder-only Transformer, trained on byte-level science prose, used as a laboratory for measuring how implementation choices affect quality, latency, throughput and memory. Every reported number is recomputed from a validated record in [`experiments/records/`](experiments/records/).
 
-Created and maintained by [Anvit Devadiga](https://github.com/AnvitDevadiga).
+## Architecture
 
-[![CI](https://github.com/AnvitDevadiga/MiniLM-Lab/actions/workflows/ci.yml/badge.svg)](https://github.com/AnvitDevadiga/MiniLM-Lab/actions/workflows/ci.yml) [![Python 3.12](https://img.shields.io/badge/Python-3.12-111111)](https://www.python.org/) [![MIT](https://img.shields.io/badge/License-MIT-111111)](LICENSE)
+![MiniLM Lab architecture](docs/figures/architecture-light.svg#gh-light-mode-only)
+![MiniLM Lab architecture](docs/figures/architecture-dark.svg#gh-dark-mode-only)
 
-MiniLM Lab is a small, inspectable language-model project. It follows the entire path from text to next-byte prediction, then tests whether engineering ideas—like reusing previous attention calculations or storing smaller weights—actually help. It is designed for a laptop budget, not to imitate a commercial chatbot.
+Defaults: d = 192, 4 layers, 6 heads, context 128, vocabulary 256 (UTF-8 bytes). Options: RoPE instead of learned positions, LayerNorm instead of RMSNorm, GELU MLP instead of SwiGLU.
 
-![MiniLM Lab architecture](docs/figures/architecture.svg)
+## Key Results
 
-### What did the experiment find?
+Apple M4 (16 GB), CPU and MPS, Python 3.12.14, torch 2.14.1. Full tables: [EXPERIMENT_RESULTS.md](docs/EXPERIMENT_RESULTS.md).
 
-The model trained on public-domain science writing by Darwin and Einstein. Paragraphs from **both** books were held out, so the numbers below are not training-set scores. [Sources and exact file hashes](data/science/manifest.json) · [Full experimental method](docs/experiment_protocol.md).
+| Experiment | Result |
+| --- | --- |
+| Attention backends, fp32, 3 trained seeds | identical held-out perplexity, top-1 predictions and greedy text across `sdpa`, `mha` and `reference` |
+| Reference ÷ SDPA forward time, 2,048 tokens | 3.4–3.9× (CPU), 3.9–5.4× (MPS); SDPA uses 8–22× less extra memory at batch 8 |
+| Training, legacy MHA vs SDPA (corpus v1, 3 seeds) | validation perplexity 19.21 ± 1.75 (MHA) vs 19.04 ± 1.37 (SDPA); training step 5–28% faster with SDPA on CPU, within 5% on MPS |
+| KV cache vs recomputation, 64 tokens | 2.2–23× faster than recomputation on CPU; slower on MPS for batch-1 prompts of 1–16 tokens (0.88×) |
+| Seed variance, published v1 configuration | seeds 42/43/44 give held-out perplexity 17.58 / 18.99 / 21.07; the published 17.58 is the best of three |
+| Held-out test book (corpus v2, Faraday) | test perplexity is 15.66 ± 2.58 (MHA) and 15.60 ± 2.63 (SDPA) |
 
-![Learning curve](docs/figures/learning.svg)
+Corpus v1 and v2 use different data and preprocessing; their perplexities are not comparable.
 
-At the final checkpoint, held-out perplexity was **17.58** across **112,111 next-byte predictions**. Perplexity measures prediction uncertainty; lower is better, but it is not a score for how helpful or factual a chatbot is.
-
-![KV-cache benchmark](docs/figures/speed.svg)
-
-The KV cache avoids recomputing attention over the full prompt after every generated token. In this controlled CPU test, it cut generation time from **119.4 ms to 33.4 ms**.
-
-![INT8 storage and latency trade-off](docs/figures/tradeoff.svg)
-
-Weight-only INT8 reduced stored model tensors by **53.6%**, but the reference implementation ran **slower** because it dequantizes weights during each forward pass. Smaller files do not automatically mean faster inference.
-
-These are **one-seed CPU measurements**, not M4/MPS results or claims of general language ability. The training corpus is about **1 MB**. [Read the report, including limitations](docs/research_report.md) or inspect the [raw measured record](docs/data/science_run.json).
-
-## Reproduce on a MacBook Air
-
-You need Python 3.12 and the ability to install PyTorch. The commands below run the checks, prepare the pinned corpus, train the small model, and score the held-out text. Training time varies by device.
-
-```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e '.[dev]'
-make check
-python scripts/prepare_science_corpus.py
-python scripts/train_tiny.py data/science/train.txt \
-  --validation-text data/science/validation.txt \
-  --steps 1000 --eval-interval 250 --gradient-accumulation-steps 4 \
-  --output-dir artifacts/runs/science-v2
-python scripts/evaluate.py data/science/train.txt \
-  --validation-text data/science/validation.txt \
-  --checkpoint artifacts/runs/science-v2/best_checkpoint.pt
-```
-
-Training chooses Apple MPS when available and otherwise runs on CPU. The published run used CPU because MPS was unavailable in its execution environment. Use `--device cpu` to match that hardware path. The corpus preparation script downloads the two source texts and records SHA-256 hashes. Source files can change upstream, so check the hashes before comparing a new run to the published one.
-
-## System
+## Implementation
 
 | Component | Implementation |
 | --- | --- |
-| Tokenization | UTF-8 byte tokenizer; educational BPE alternative |
-| Decoder | causal multi-head attention, learned positions or RoPE, RMSNorm, SwiGLU, tied token/output embeddings |
-| Training | AdamW, true optimizer-step accumulation, deterministic full-split checkpoint selection, resume with optimizer and RNG state |
-| Evaluation | every held-out next token scored once; perplexity and bits per byte |
-| Generation | temperature, top-k, top-p; KV cache with sliding-window refresh |
-| Experiments | repeated decode benchmark; portable MLP weight-only INT8 comparison; LoRA linear building block |
+| Model | decoder-only, pre-norm residual blocks, RMSNorm, SwiGLU, learned positions or RoPE, tied embeddings ([`model.py`](src/minilm_lab/model.py)) |
+| Attention backends | `sdpa` (default), `mha` (legacy path of all v1 results; alias `auto`), `reference`; same weights, selected at run time ([diagram](docs/figures/attention-backends-light.svg) · [dark](docs/figures/attention-backends-dark.svg)) |
+| Inference | KV cache with prefill, single-token decode and sliding-window refresh ([diagram](docs/figures/kv-cache-light.svg) · [dark](docs/figures/kv-cache-dark.svg)); uncached sampling with temperature, top-k and top-p; cached sampling with temperature and greedy decoding |
+| Training | AdamW, gradient accumulation, full-split checkpoint selection, bitwise resume with optimizer and RNG state |
+| Evaluation | every held-out next byte scored once; perplexity and bits per byte |
+| Provenance | append-only records, deterministic model fingerprints, audited baseline, strict validation ([diagram](docs/figures/reproducibility-light.svg) · [dark](docs/figures/reproducibility-dark.svg)) |
 
-PyTorch provides tensor operations, automatic differentiation, multi-head attention and SDPA. The project exposes the model and systems decisions around those primitives. It is not a claim to reimplement an entire deep-learning framework.
+## Quick Start
 
-## Read the evidence
+Python 3.12. The lock file pins the exact packages used for every record.
 
-- [Research paper (PDF)](output/pdf/MiniLM-Lab-Research-Paper.pdf)
-- [Research report](docs/research_report.md)
-- [Raw science run record](docs/data/science_run.json)
-- [Experiment protocol](docs/experiment_protocol.md)
-- [Implementation audit](docs/implementation_audit.md)
-- [2026 positioning](docs/positioning_2026.md)
-- [Roadmap](docs/roadmap.md)
-- [Contributing](CONTRIBUTING.md)
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate
+python -m pip install -r requirements/release-lock.txt
+python -m pip install -e . --no-deps
+make check                                   # ruff + test suite
 
-The research paper is generated from the tracked results and benchmark protocol with
-\`python -m pip install -e '.[report]'\` followed by
-\`python scripts/build_research_report.py\`.
+python scripts/train_tiny.py data/science-v2/train.txt \
+  --validation-text data/science-v2/validation.txt \
+  --steps 200 --device cpu --output-dir artifacts/runs/quickstart
+python scripts/evaluate.py data/science-v2/train.txt \
+  --validation-text data/science-v2/validation.txt --device cpu \
+  --checkpoint artifacts/runs/quickstart/best_checkpoint.pt
+python scripts/generate.py "Natural selection" --checkpoint artifacts/runs/quickstart/best_checkpoint.pt
+```
 
-## Scope
+## Reproducibility
 
-The corpus contains about 1 MB of training text. The model is a controlled educational system for studying language-model mechanics and inference trade-offs. Generated text should not be treated as reliable scientific information.
+```bash
+./scripts/verify_release.sh                  # lint, tests, strict record validation, report drift
+python scripts/validate_records.py --strict  # model identities verified from artifacts or the pinned baseline
+
+# published v1 run: legacy backend selected explicitly; bitwise on CPU with torch 2.14 (perplexity 17.58)
+python scripts/train_tiny.py data/science/train.txt --validation-text data/science/validation.txt \
+  --steps 1000 --eval-interval 250 --gradient-accumulation-steps 4 \
+  --device cpu --seed 42 --attention-backend mha --output-dir artifacts/runs/science-v1-s42
+
+PYTHON=python ./experiments/sdpa_v1.sh       # v1: MHA vs SDPA training, 3 seeds
+PYTHON=python ./experiments/v2_protocol.sh   # v2: verify corpus, train, select on validation, test once
+```
+
+Checkpoint files are not distributed, and they embed elapsed time, so a regenerated file does not reproduce its recorded SHA-256. Models are compared by a deterministic fingerprint instead (`minilm-model-identity/v1`). Historical fingerprints are anchored by an audited baseline whose hash is pinned in code: an integrity anchor in reviewed code, not a cryptographic signature. Rules: [RECORD_SCHEMA.md](docs/RECORD_SCHEMA.md) · checks: [RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md).
+
+## Documentation
+
+- [Experiment results](docs/EXPERIMENT_RESULTS.md): all tables, method and limitations
+- [Research report](docs/research_report.md) and [paper (PDF, v1 only)](output/pdf/MiniLM-Lab-Research-Paper.pdf)
+- [Implementation audit](docs/implementation_audit.md): evidence for each correctness claim
+- [Record schema and provenance](docs/RECORD_SCHEMA.md) · [Release checklist](docs/RELEASE_CHECKLIST.md)
+- [Experiment protocol](docs/experiment_protocol.md) · [Roadmap](docs/roadmap.md) · [Contributing](CONTRIBUTING.md)
+- Corpus manifests: [v1](data/science/manifest.json) · [v2](data/science-v2/manifest.json)
+
+## Limitations
+
+- **Small, under-trained models.** Every run is 1,000 optimizer steps on about 1 MB of text and spends most of it on an early loss plateau; results are seed-sensitive, and three seeds give a spread, not a confidence interval.
+- **One held-out test book.** The v2 test set measures transfer to one unseen author and topic, not broad generalization. Its results are published and can no longer guide tuning under an untouched-test claim.
+- **Legacy v1 corpus.** 26% of v1 held-out bytes are Darwin's alphabetical index, and v1 validation both selects checkpoints and is reported; v2 fixes both.
+- **One machine.** Timings come from one laptop; MPS findings reflect a tiny model where launch overhead dominates; CUDA is untested; no cross-device or cross-version bitwise reproducibility is claimed. The September KV-cache speedup (3.58×) re-measures at 3.40× on the same hardware.
+- **Trust anchor.** Without the original checkpoints, historical model fingerprints rest on the pinned audited baseline.
 
 MIT licensed. © Anvit Devadiga.

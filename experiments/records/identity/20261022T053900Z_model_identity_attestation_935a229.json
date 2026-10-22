@@ -1,0 +1,212 @@
+{
+  "record_version": 2,
+  "created_utc": "20261022T053900Z",
+  "experiment": "model_identity",
+  "environment": {
+    "python": "3.12.14",
+    "torch": "2.14.1",
+    "numpy": "2.5.4",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "processor": "Apple M4",
+    "memory_bytes": 17179869184,
+    "cpu_count": 10,
+    "torch_threads": 4,
+    "device": "cpu",
+    "mps_available": true,
+    "cuda_available": false,
+    "git": {
+      "commit": "935a22902e6513f554c972172843e60d8f2c0810",
+      "branch": "experiments/sdpa-training-v2",
+      "dirty": true
+    },
+    "command": "python scripts/attest_model_identity.py --regenerated training/20261022T041654Z_training_science-v1_auto_seed42_48e95f8.json=/private/tmp/claude-501/-Users-anvit-Downloads-Projects-MiniLM-Lab/ad12857c-f862-4809-a0b1-016af22e423c/scratchpad/release-clone/artifacts/runs/science-v1-s42/best_checkpoint.pt"
+  },
+  "settings": {
+    "scheme": "minilm-model-identity/v1",
+    "verification": "checkpoint file SHA-256 equals the training record before hashing tensors"
+  },
+  "results": {
+    "attested": [
+      {
+        "training_record": "training/20261022T040614Z_training_science-v1_sdpa_seed42_48e95f8.json",
+        "kind": "best",
+        "checkpoint_path": "artifacts/runs/sdpa-v1/sdpa-s42/best_checkpoint.pt",
+        "checkpoint_sha256": "de734545979c6a4b9a5d6a21bb0299c8c91ac69c32effbfcaca23a86b7cd1fa0",
+        "model_identity_sha256": "292224766ca70f7501a2ad3b1dbd7b593a7f32ff025ec8ead35c81914bdde2e9"
+      },
+      {
+        "training_record": "training/20261022T040614Z_training_science-v1_sdpa_seed42_48e95f8.json",
+        "kind": "final",
+        "checkpoint_path": "artifacts/runs/sdpa-v1/sdpa-s42/tiny_checkpoint.pt",
+        "checkpoint_sha256": "4c52fc4c8b32fae5ca82295eb33f4c9331ad699b3b87d3c6d533ff043412b242",
+        "model_identity_sha256": "292224766ca70f7501a2ad3b1dbd7b593a7f32ff025ec8ead35c81914bdde2e9"
+      },
+      {
+        "training_record": "training/20261022T040834Z_training_science-v1_sdpa_seed43_48e95f8.json",
+        "kind": "best",
+        "checkpoint_path": "artifacts/runs/sdpa-v1/sdpa-s43/best_checkpoint.pt",
+        "checkpoint_sha256": "0a1357240562d1851b8db80c85e3ce4b4bfd0b00a4c6d9c41ddead928d90c916",
+        "model_identity_sha256": "cc7a5dd2af26be2c8c5bd1a550820a4fe44b01684895202a272a75581a885bd6"
+      },
+      {
+        "training_record": "training/20261022T040834Z_training_science-v1_sdpa_seed43_48e95f8.json",
+        "kind": "final",
+        "checkpoint_path": "artifacts/runs/sdpa-v1/sdpa-s43/tiny_checkpoint.pt",
+        "checkpoint_sha256": "02c866b578364f3fcbddb8b7e0f53d5088c0f540ab5ff006b4f821579544c599",
+        "model_identity_sha256": "cc7a5dd2af26be2c8c5bd1a550820a4fe44b01684895202a272a75581a885bd6"
+      },
+      {
+        "training_record": "training/20261022T041103Z_training_science-v1_auto_seed43_48e95f8.json",
+        "kind": "best",
+        "checkpoint_path": "artifacts/runs/sdpa-v1/auto-s43/best_checkpoint.pt",
+        "checkpoint_sha256": "e2285dfc79e7aa1d430cac7720bc5997139210fef876055c23da375aab24b04c",
+        "model_identity_sha256": "c609dd197aa7bfa285b3a5fe16eb834cbeab4369e5ff512d5ea27ea6c93ff7d6"
+      },
+      {
+        "training_record": "training/20261022T041103Z_training_science-v1_auto_seed43_48e95f8.json",
+        "kind": "final",
+        "checkpoint_path": "artifacts/runs/sdpa-v1/auto-s43/tiny_checkpoint.pt",
+        "checkpoint_sha256": "c9a217ad9a778171738c115cd23a3b271957fb570f7990e616d5444e7baed976",
+        "model_identity_sha256": "c609dd197aa7bfa285b3a5fe16eb834cbeab4369e5ff512d5ea27ea6c93ff7d6"
+      },
+      {
+        "training_record": "training/20261022T041335Z_training_science-v1_auto_seed44_48e95f8.json",
+        "kind": "best",
+        "checkpoint_path": "artifacts/runs/sdpa-v1/auto-s44/best_checkpoint.pt",
+        "checkpoint_sha256": "d4fe3800f75cd1f3b7ef68bfa463dc48f503585e5cd038da8f22b7f67014f794",
+        "model_identity_sha256": "f2546d9a7967994e554618d99394bc4bdd5d718a3d4ec7cee8c99686f59314e8"
+      },
+      {
+        "training_record": "training/20261022T041335Z_training_science-v1_auto_seed44_48e95f8.json",
+        "kind": "final",
+        "checkpoint_path": "artifacts/runs/sdpa-v1/auto-s44/tiny_checkpoint.pt",
+        "checkpoint_sha256": "becaa1b609e62d9591a2cce4cae60e0d158c501db10a7e2edcc5209a1a4ed5ef",
+        "model_identity_sha256": "f2546d9a7967994e554618d99394bc4bdd5d718a3d4ec7cee8c99686f59314e8"
+      },
+      {
+        "training_record": "training/20261022T041553Z_training_science-v1_sdpa_seed44_48e95f8.json",
+        "kind": "best",
+        "checkpoint_path": "artifacts/runs/sdpa-v1/sdpa-s44/best_checkpoint.pt",
+        "checkpoint_sha256": "e7544665b394924f64facd47c731cd2950caa35d0ced5aaa66c77cdeb4034e47",
+        "model_identity_sha256": "22694540faf7514d97d05b0408f1d7a659d9380bae3822137aa814935a82afbd"
+      },
+      {
+        "training_record": "training/20261022T041553Z_training_science-v1_sdpa_seed44_48e95f8.json",
+        "kind": "final",
+        "checkpoint_path": "artifacts/runs/sdpa-v1/sdpa-s44/tiny_checkpoint.pt",
+        "checkpoint_sha256": "5de158ff5c205dcf1e06ecce60ad189878d8f0899a7c81e9b4b19145e7628244",
+        "model_identity_sha256": "22694540faf7514d97d05b0408f1d7a659d9380bae3822137aa814935a82afbd"
+      },
+      {
+        "training_record": "training/20261022T041654Z_training_science-v1_auto_seed42_48e95f8.json",
+        "kind": "best",
+        "checkpoint_path": "artifacts/runs/sdpa-v1/auto-s42/best_checkpoint.pt",
+        "checkpoint_sha256": "23f0aa813704e0cfc02d0780386fe76d1ee26f70aaa674ce83a849a85fb93546",
+        "model_identity_sha256": "c0c6f2995c5b97d331dc976f01a9af2f6cbea0bed3de442bf0d43986242b1425"
+      },
+      {
+        "training_record": "training/20261022T041654Z_training_science-v1_auto_seed42_48e95f8.json",
+        "kind": "final",
+        "checkpoint_path": "artifacts/runs/sdpa-v1/auto-s42/tiny_checkpoint.pt",
+        "checkpoint_sha256": "b1af615e4dc2908a234f45c3c8c48c481f7c2b15294e76abd588f17da9b8763d",
+        "model_identity_sha256": "c0c6f2995c5b97d331dc976f01a9af2f6cbea0bed3de442bf0d43986242b1425"
+      },
+      {
+        "training_record": "training/20261022T042403Z_training_science-v2_auto_seed42_897db37.json",
+        "kind": "best",
+        "checkpoint_path": "artifacts/runs/v2/auto-s42/best_checkpoint.pt",
+        "checkpoint_sha256": "1cb3fbca57f10b72d33c945325dfc9ed1335cca02fc2fe07150fae5ba40a4b8e",
+        "model_identity_sha256": "7b25516b2cf08abfd68d2a998e1b91963b1b5c0290a09727a14744e6fd7840af"
+      },
+      {
+        "training_record": "training/20261022T042403Z_training_science-v2_auto_seed42_897db37.json",
+        "kind": "final",
+        "checkpoint_path": "artifacts/runs/v2/auto-s42/tiny_checkpoint.pt",
+        "checkpoint_sha256": "f4e18218a9da9670cd647c4baf264ddada9ca50fdb86234721e59292ecaae880",
+        "model_identity_sha256": "7b25516b2cf08abfd68d2a998e1b91963b1b5c0290a09727a14744e6fd7840af"
+      },
+      {
+        "training_record": "training/20261022T042630Z_training_science-v2_sdpa_seed42_897db37.json",
+        "kind": "best",
+        "checkpoint_path": "artifacts/runs/v2/sdpa-s42/best_checkpoint.pt",
+        "checkpoint_sha256": "6e8b0471016093200fa1a7045e41b4dcb1be07bb0bb742444bd2c19eaa9f2cc2",
+        "model_identity_sha256": "cecb5f2ebbcae98441896f1da50d5306ee8e49ef063a2a3217b22e089a935625"
+      },
+      {
+        "training_record": "training/20261022T042630Z_training_science-v2_sdpa_seed42_897db37.json",
+        "kind": "final",
+        "checkpoint_path": "artifacts/runs/v2/sdpa-s42/tiny_checkpoint.pt",
+        "checkpoint_sha256": "264b42c669549c77acc92d05c122beedd9ec87b942a077b073fd7758fb3abef9",
+        "model_identity_sha256": "cecb5f2ebbcae98441896f1da50d5306ee8e49ef063a2a3217b22e089a935625"
+      },
+      {
+        "training_record": "training/20261022T042859Z_training_science-v2_auto_seed43_897db37.json",
+        "kind": "best",
+        "checkpoint_path": "artifacts/runs/v2/auto-s43/best_checkpoint.pt",
+        "checkpoint_sha256": "ad66af927334d8991901682c91a0c1ca539707681a0ba890d7145101ba3c041c",
+        "model_identity_sha256": "242d813f6a59b1b50abeddc211983de28e0fc76ea0dc323ca611a9f9acec4578"
+      },
+      {
+        "training_record": "training/20261022T042859Z_training_science-v2_auto_seed43_897db37.json",
+        "kind": "final",
+        "checkpoint_path": "artifacts/runs/v2/auto-s43/tiny_checkpoint.pt",
+        "checkpoint_sha256": "46117ebc02af5b2fe2a5cf6b6301435955f8a865aeef7f30a992e5c33694543c",
+        "model_identity_sha256": "242d813f6a59b1b50abeddc211983de28e0fc76ea0dc323ca611a9f9acec4578"
+      },
+      {
+        "training_record": "training/20261022T043119Z_training_science-v2_sdpa_seed43_897db37.json",
+        "kind": "best",
+        "checkpoint_path": "artifacts/runs/v2/sdpa-s43/best_checkpoint.pt",
+        "checkpoint_sha256": "3451e8577c0a5cd8f5b5cadd7aec3f7fd2d9b72fde24db01e6520f9b083de4a4",
+        "model_identity_sha256": "d25ea987563add6fa1a8f53f032a82f4c3d5893c233b6d9cc2802fd1cefae0cc"
+      },
+      {
+        "training_record": "training/20261022T043119Z_training_science-v2_sdpa_seed43_897db37.json",
+        "kind": "final",
+        "checkpoint_path": "artifacts/runs/v2/sdpa-s43/tiny_checkpoint.pt",
+        "checkpoint_sha256": "59dd70bd83b42f3f4075d7f44fbbe162a908c10d8f07c0a831cc13d080c53340",
+        "model_identity_sha256": "d25ea987563add6fa1a8f53f032a82f4c3d5893c233b6d9cc2802fd1cefae0cc"
+      },
+      {
+        "training_record": "training/20261022T043349Z_training_science-v2_auto_seed44_897db37.json",
+        "kind": "best",
+        "checkpoint_path": "artifacts/runs/v2/auto-s44/best_checkpoint.pt",
+        "checkpoint_sha256": "cb77533a909fb6f40f08c3a50854a28765ab214aa87a25a8bb8bc5566211cf40",
+        "model_identity_sha256": "6e32612238ffcfd87920db587df899a4a021e5206f50e55dc5f74041a8961062"
+      },
+      {
+        "training_record": "training/20261022T043349Z_training_science-v2_auto_seed44_897db37.json",
+        "kind": "final",
+        "checkpoint_path": "artifacts/runs/v2/auto-s44/tiny_checkpoint.pt",
+        "checkpoint_sha256": "eeef0fd313c7d9d023674a38ac94c05423bd02c5490937cf05d3bdabadb1b219",
+        "model_identity_sha256": "6e32612238ffcfd87920db587df899a4a021e5206f50e55dc5f74041a8961062"
+      },
+      {
+        "training_record": "training/20261022T043559Z_training_science-v2_sdpa_seed44_897db37.json",
+        "kind": "best",
+        "checkpoint_path": "artifacts/runs/v2/sdpa-s44/best_checkpoint.pt",
+        "checkpoint_sha256": "2488847e2e18787df5cbd5dd3000f2405527961878cb1c4a0ee510b7f561c038",
+        "model_identity_sha256": "95142ee6b38e36487d76a0d3bf7b021d9a0800efa956b70db9da79b85f9ceab0"
+      },
+      {
+        "training_record": "training/20261022T043559Z_training_science-v2_sdpa_seed44_897db37.json",
+        "kind": "final",
+        "checkpoint_path": "artifacts/runs/v2/sdpa-s44/tiny_checkpoint.pt",
+        "checkpoint_sha256": "5f25f43bcdd4a01e7bab23978fa15fdf85e650008b93d8a39b7960437885c687",
+        "model_identity_sha256": "95142ee6b38e36487d76a0d3bf7b021d9a0800efa956b70db9da79b85f9ceab0"
+      }
+    ],
+    "unavailable": [],
+    "regeneration_checks": [
+      {
+        "training_record": "training/20261022T041654Z_training_science-v1_auto_seed42_48e95f8.json",
+        "regenerated_checkpoint_sha256": "d2df75b6dc4e44c0317f82f9c9bc666339094139aa89d075fa96384644ecbfa0",
+        "original_checkpoint_sha256": "23f0aa813704e0cfc02d0780386fe76d1ee26f70aaa674ce83a849a85fb93546",
+        "file_hash_equal": false,
+        "model_identity_sha256": "c0c6f2995c5b97d331dc976f01a9af2f6cbea0bed3de442bf0d43986242b1425",
+        "model_identity_equal": true
+      }
+    ]
+  }
+}

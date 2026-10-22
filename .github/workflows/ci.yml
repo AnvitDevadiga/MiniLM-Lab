@@ -11,12 +11,17 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # validate_records.py checks that every recorded commit exists
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Install project
-        run: python -m pip install -e ".[dev]"
-      - name: Lint
-        run: ruff check .
-      - name: Test
-        run: pytest -q
+        run: python -m pip install -r requirements/release-lock.txt && python -m pip install -e . --no-deps
+      - name: Hardware report
+        # Hosted macOS arm64 runners report MPS as available but cannot allocate on it;
+        # MPS tests are then skipped with this reason (run them on Apple Silicon with
+        # MINILM_REQUIRE_MPS=1). CPU correctness tests always run.
+        run: python tests/hardware.py
+      - name: Release verification (lint, tests, strict record validation, report drift)
+        run: ./scripts/verify_release.sh

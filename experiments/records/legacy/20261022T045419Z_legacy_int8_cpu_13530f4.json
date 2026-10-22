@@ -1,0 +1,46 @@
+{
+  "record_version": 1,
+  "created_utc": "20261022T045419Z",
+  "experiment": "legacy_int8_comparison",
+  "environment": {
+    "python": "3.12.14",
+    "torch": "2.14.1",
+    "numpy": "2.5.4",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "processor": "Apple M4",
+    "memory_bytes": 17179869184,
+    "cpu_count": 10,
+    "torch_threads": 4,
+    "device": "cpu",
+    "mps_available": true,
+    "cuda_available": false,
+    "git": {
+      "commit": "13530f436d5b9b9b1e3480fd33d4dc6891c0cf28",
+      "branch": "experiments/sdpa-training-v2",
+      "dirty": true
+    },
+    "command": "python scripts/quantize.py --checkpoint artifacts/runs/sdpa-v1/auto-s42/best_checkpoint.pt --validation-text data/science/validation.txt --attention-backend mha --output /private/tmp/claude-501/-Users-anvit-Downloads-Projects-MiniLM-Lab/ad12857c-f862-4809-a0b1-016af22e423c/scratchpad/int8.json --record-dir experiments/records/legacy"
+  },
+  "settings": {
+    "checkpoint": "artifacts/runs/sdpa-v1/auto-s42/best_checkpoint.pt",
+    "checkpoint_sha256": "23f0aa813704e0cfc02d0780386fe76d1ee26f70aaa674ce83a849a85fb93546",
+    "validation_text": "data/science/validation.txt",
+    "validation_sha256": "e25d4e45706bbf4251129dbb079f3487660c453cf8b34407901350538b23e2e7",
+    "latency": "median of 5 repeats of 32 forward passes after one warmup",
+    "attention_backend": "mha"
+  },
+  "results": {
+    "method": "per-output-channel symmetric INT8 linear weights; dequantize on each forward pass",
+    "scope": "MLP nn.Linear layers; attention projections and tied LM head remain FP32",
+    "device": "cpu",
+    "attention_backend": "mha",
+    "original_validation_loss": 2.866917291863034,
+    "int8_validation_loss": 2.867066869126566,
+    "loss_delta": 0.00014957726353204137,
+    "original_stored_bytes": 9844480,
+    "int8_stored_bytes": 4563712,
+    "original_32_forward_seconds": 0.0560352909960784,
+    "int8_32_forward_seconds": 0.06615462500485592
+  }
+}

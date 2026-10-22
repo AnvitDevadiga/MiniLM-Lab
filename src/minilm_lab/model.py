@@ -34,10 +34,54 @@ class RMSNorm(nn.Module):
         return x * torch.rsqrt(variance + self.eps).to(dtype=x.dtype) * self.weight
 
 
+# sdpa: torch scaled_dot_product_attention (default since the first release).
+# mha: the original path that produced every science-v1 result:
+#      nn.MultiheadAttention for learned positions in forward(), SDPA for RoPE
+#      and for forward_cached().
+# reference: explicit softmax(QK^T / sqrt(d)) V for numerical comparison.
+ATTENTION_BACKENDS = ("sdpa", "mha", "reference")
+DEFAULT_ATTENTION_BACKEND = "sdpa"
+# Records and checkpoints written before the first release call the mha path "auto".
+LEGACY_BACKEND_ALIASES = {"auto": "mha"}
+
+
+def canonical_backend(name: str | None) -> str:
+    """Canonical backend name; checkpoints without a backend predate the field and used mha."""
+    if name is None:
+        return "mha"
+    name = LEGACY_BACKEND_ALIASES.get(name, name)
+    if name not in ATTENTION_BACKENDS:
+        raise ValueError(f"attention backend must be one of {ATTENTION_BACKENDS} (or legacy 'auto')")
+    return name
+
+
+def causal_mask(query_length: int, key_length: int, device: torch.device) -> Tensor:
+    """Boolean mask, True where attention is allowed, with queries occupying the last positions."""
+    past_length = key_length - query_length
+    key_positions = torch.arange(key_length, device=device)
+    query_positions = past_length + torch.arange(query_length, device=device)
+    return key_positions[None, :] <= query_positions[:, None]
+
+
+def reference_causal_attention(q: Tensor, k: Tensor, v: Tensor, dropout_p: float = 0.0) -> Tensor:
+    """Explicit softmax(QK^T / sqrt(d)) V that materializes the full score matrix.
+
+    Matmuls run in the input dtype; the softmax runs in at least float32 (as in
+    common eager implementations), never below the input precision, so float64
+    inputs stay float64. Queries are aligned to the last key positions.
+    """
+    scores = q @ k.transpose(-2, -1)
+    scores = scores.to(torch.promote_types(scores.dtype, torch.float32)) * q.size(-1) ** -0.5
+    scores = scores.masked_fill(~causal_mask(q.size(-2), k.size(-2), q.device), float("-inf"))
+    weights = scores.softmax(dim=-1).to(v.dtype)
+    return F.dropout(weights, dropout_p) @ v if dropout_p else weights @ v
+
+
 class CausalSelfAttention(nn.Module):
     def __init__(self, config: MiniLMConfig) -> None:
         super().__init__()
         self.rope_theta = config.rope_theta
+        self.backend = DEFAULT_ATTENTION_BACKEND
         self.attention = nn.MultiheadAttention(
             config.embedding_dim, config.num_heads, config.dropout, batch_first=True
         )
@@ -45,13 +89,7 @@ class CausalSelfAttention(nn.Module):
             "mask", torch.triu(torch.ones(config.context_length, config.context_length), diagonal=1).bool()
         )
 
-    def forward_cached(
-        self,
-        x: Tensor,
-        past: tuple[Tensor, Tensor] | None = None,
-        use_rope: bool = False,
-        position_offset: int = 0,
-    ) -> tuple[Tensor, tuple[Tensor, Tensor]]:
+    def _project(self, x: Tensor, use_rope: bool, position_offset: int) -> tuple[Tensor, Tensor, Tensor]:
         batch, length, _ = x.shape
         heads = self.attention.num_heads
         width = x.size(-1) // heads
@@ -63,49 +101,56 @@ class CausalSelfAttention(nn.Module):
         if use_rope:
             q = self._apply_rope(q, position_offset)
             k = self._apply_rope(k, position_offset)
-        if past is not None:
-            k = torch.cat((past[0], k), dim=2)
-            v = torch.cat((past[1], v), dim=2)
-        if past is None:
-            output = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+        return q, k, v
+
+    def _attend(self, q: Tensor, k: Tensor, v: Tensor) -> Tensor:
+        # Same attention-weight dropout as nn.MultiheadAttention in training.
+        dropout = self.attention.dropout if self.training else 0.0
+        if self.backend == "reference":
+            output = reference_causal_attention(q, k, v, dropout)
+        elif q.size(2) == k.size(2):
+            output = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout, is_causal=True)
         else:
             # Non-square is_causal is upper-left aligned in PyTorch. Align
             # each query with its absolute position in the concatenated keys.
-            past_length = past[0].size(2)
-            key_positions = torch.arange(k.size(2), device=x.device)
-            query_positions = past_length + torch.arange(length, device=x.device)
-            mask = key_positions[None, :] <= query_positions[:, None]
-            output = F.scaled_dot_product_attention(q, k, v, attn_mask=mask)
-        output = output.transpose(1, 2).reshape(batch, length, -1)
-        return self.attention.out_proj(output), (k, v)
+            mask = causal_mask(q.size(2), k.size(2), q.device)
+            output = F.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=dropout)
+        return self.attention.out_proj(output.transpose(1, 2).reshape(q.size(0), q.size(2), -1))
+
+    def forward_cached(
+        self,
+        x: Tensor,
+        past: tuple[Tensor, Tensor] | None = None,
+        use_rope: bool = False,
+        position_offset: int = 0,
+    ) -> tuple[Tensor, tuple[Tensor, Tensor]]:
+        q, k, v = self._project(x, use_rope, position_offset)
+        if past is not None:
+            k = torch.cat((past[0], k), dim=2)
+            v = torch.cat((past[1], v), dim=2)
+        return self._attend(q, k, v), (k, v)
+
     def _apply_rope(self, x: Tensor, position_offset: int = 0) -> Tensor:
         length = x.size(2)
         half = x.size(-1) // 2
-        positions = torch.arange(position_offset, position_offset + length, device=x.device, dtype=x.dtype)
-        frequencies = 1.0 / (self.rope_theta ** (torch.arange(half, device=x.device, dtype=x.dtype) / half))
+        # Angles are computed in float32: half-precision positions and products
+        # lose integer resolution and produce large rotation errors.
+        positions = torch.arange(position_offset, position_offset + length, device=x.device, dtype=torch.float32)
+        frequencies = 1.0 / (self.rope_theta ** (torch.arange(half, device=x.device, dtype=torch.float32) / half))
         angles = positions[:, None] * frequencies[None, :]
-        cos, sin = angles.cos()[None, None, :, :], angles.sin()[None, None, :, :]
+        cos = angles.cos()[None, None, :, :].to(x.dtype)
+        sin = angles.sin()[None, None, :, :].to(x.dtype)
         first, second = x[..., :half], x[..., half : 2 * half]
         rotated = torch.cat((first * cos - second * sin, first * sin + second * cos), dim=-1)
         return torch.cat((rotated, x[..., 2 * half :]), dim=-1)
 
     def forward(self, x: Tensor, use_rope: bool = False) -> Tensor:
-        length = x.size(1)
-        if use_rope:
-            # This path is kept explicit for the ablation; PyTorch's attention
-            # still handles masking and optimized kernels.
-            qkv = F.linear(x, self.attention.in_proj_weight, self.attention.in_proj_bias)
-            q, k, v = qkv.chunk(3, dim=-1)
-            heads = self.attention.num_heads
-            width = x.size(-1) // heads
-            q = self._apply_rope(q.reshape(x.size(0), length, heads, width).transpose(1, 2))
-            k = self._apply_rope(k.reshape(x.size(0), length, heads, width).transpose(1, 2))
-            v = v.reshape(x.size(0), length, heads, width).transpose(1, 2)
-            output = torch.nn.functional.scaled_dot_product_attention(q, k, v, is_causal=True).transpose(1, 2).reshape(x.size(0), length, -1)
-            output = self.attention.out_proj(output)
-        else:
+        if self.backend == "mha" and not use_rope:
+            length = x.size(1)
             output, _ = self.attention(x, x, x, attn_mask=self.mask[:length, :length], need_weights=False)
-        return output
+            return output
+        # RoPE needs explicit q/k access, so it always uses _attend.
+        return self._attend(*self._project(x, use_rope, 0))
 
 
 class TransformerBlock(nn.Module):
@@ -165,6 +210,15 @@ class MiniLM(nn.Module):
         self.lm_head = nn.Linear(c.embedding_dim, c.vocab_size, bias=False)
         self.lm_head.weight = self.token_embedding.weight
         nn.init.normal_(self.token_embedding.weight, mean=0.0, std=0.02)
+
+    def set_attention_backend(self, backend: str) -> "MiniLM":
+        """Select how attention is computed without changing any weights."""
+        if backend is None:
+            raise ValueError("attention backend must be named explicitly")
+        backend = canonical_backend(backend)
+        for block in self.blocks:
+            block.attention.backend = backend
+        return self
 
     def forward(self, input_ids: Tensor, targets: Tensor | None = None) -> tuple[Tensor, Tensor | None]:
         _, length = input_ids.shape

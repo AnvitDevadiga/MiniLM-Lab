@@ -8,7 +8,13 @@ import torch
 
 from minilm_lab.generation import generate
 from minilm_lab.kv_cache import generate_with_kv_cache
-from minilm_lab.model import MiniLM, MiniLMConfig
+from minilm_lab.model import (
+    ATTENTION_BACKENDS,
+    DEFAULT_ATTENTION_BACKEND,
+    MiniLM,
+    MiniLMConfig,
+)
+from minilm_lab.provenance import environment, file_sha256, write_record
 from minilm_lab.tokenizer import BPETokenizer, ByteTokenizer
 
 
@@ -19,6 +25,11 @@ def main() -> None:
     parser.add_argument("--repeats", type=int, default=7)
     parser.add_argument("--device", choices=("auto", "cpu", "mps"), default="auto")
     parser.add_argument("--output", type=Path, default=None)
+    parser.add_argument("--record-dir", type=Path, default=None, help="also write an experiment record (experiments/records/legacy)")
+    parser.add_argument(
+        "--attention-backend", choices=(*ATTENTION_BACKENDS, "auto"), default=DEFAULT_ATTENTION_BACKEND,
+        help="sdpa (default); mha reproduces published science-v1 measurements",
+    )
     args = parser.parse_args()
     if args.tokens < 1 or args.repeats < 3:
         parser.error("tokens must be positive and repeats must be at least three")
@@ -26,6 +37,7 @@ def main() -> None:
     checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=True)
     model = MiniLM(MiniLMConfig(**checkpoint["config"])).to(device)
     model.load_state_dict(checkpoint["model"])
+    model.set_attention_backend(args.attention_backend)
     tokenizer = ByteTokenizer() if checkpoint.get("tokenizer", "byte") == "byte" else BPETokenizer.load(checkpoint["tokenizer"])
     prompt = "The experiment shows "
     modes = {
@@ -48,6 +60,7 @@ def main() -> None:
     cached = statistics.median(timings["cached"])
     result = {
         "device": device,
+        "attention_backend": model.blocks[0].attention.backend,
         "generated_tokens": args.tokens,
         "repeats": args.repeats,
         "warmup_runs_per_mode": 1,
@@ -64,6 +77,11 @@ def main() -> None:
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    if args.record_dir:
+        settings = {"checkpoint": str(args.checkpoint), "checkpoint_sha256": file_sha256(args.checkpoint), "tokens": args.tokens,
+                    "repeats": args.repeats, "warmup": 1, "seed": 1234, "attention_backend": result["attention_backend"]}
+        payload = {"experiment": "legacy_kv_cache_benchmark", "environment": environment(device), "settings": settings, "results": result}
+        print(f"wrote {write_record(args.record_dir, 'legacy_kv_cache_' + device, payload)}")
 
 
 if __name__ == "__main__":

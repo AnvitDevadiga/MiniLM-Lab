@@ -9,8 +9,16 @@ from pathlib import Path
 import torch
 
 from minilm_lab.data import load_text, make_batch, split_tokens
+from minilm_lab.identity import checkpoint_identity
 from minilm_lab.metrics import evaluate_tokens
-from minilm_lab.model import MiniLM, MiniLMConfig
+from minilm_lab.model import (
+    ATTENTION_BACKENDS,
+    DEFAULT_ATTENTION_BACKEND,
+    MiniLM,
+    MiniLMConfig,
+    canonical_backend,
+)
+from minilm_lab.provenance import peak_rss_bytes, synchronize
 from minilm_lab.tokenizer import BPETokenizer, ByteTokenizer
 
 
@@ -18,7 +26,7 @@ def choose_device() -> str:
     return "mps" if torch.backends.mps.is_available() else "cpu"
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("text", type=Path)
     parser.add_argument("--steps", type=int, default=100)
@@ -35,8 +43,18 @@ def main() -> None:
     parser.add_argument("--tokenizer", type=Path, default=None, help="BPE JSON artifact; omit for byte tokenizer")
     parser.add_argument("--gradient-accumulation-steps", type=int, default=1)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--attention-backend", choices=(*ATTENTION_BACKENDS, "auto"), default=DEFAULT_ATTENTION_BACKEND,
+        help="sdpa (default); mha reproduces science-v1 results ('auto' is its legacy name); reference is the explicit implementation",
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts"))
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
     args = parser.parse_args()
+    args.attention_backend = canonical_backend(args.attention_backend)
     if args.steps < 1 or args.eval_interval < 1 or args.gradient_accumulation_steps < 1:
         parser.error("steps, eval interval and accumulation must be positive")
     output = args.output_dir / "tiny_checkpoint.pt"
@@ -56,7 +74,7 @@ def main() -> None:
     if train_ids.numel() <= args.context_length or validation_ids.numel() <= args.context_length:
         raise ValueError("both splits must exceed context_length")
     config = MiniLMConfig(context_length=args.context_length, vocab_size=tokenizer.vocab_size, embedding_dim=args.embedding_dim, num_layers=args.num_layers, num_heads=args.num_heads, positional_encoding=args.position)
-    model = MiniLM(config).to(device)
+    model = MiniLM(config).to(device).set_attention_backend(args.attention_backend)
     optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4)
     metrics = []
     best_validation_loss = float("inf")
@@ -66,6 +84,8 @@ def main() -> None:
         checkpoint = torch.load(output, map_location=device, weights_only=True)
         if checkpoint["config"] != config.__dict__ or checkpoint.get("corpus_sha256") != corpus_sha256:
             raise ValueError("resume config or corpus differs from checkpoint")
+        if canonical_backend(checkpoint.get("attention_backend")) != args.attention_backend:
+            raise ValueError("resume attention backend differs from checkpoint")
         model.load_state_dict(checkpoint["model"])
         if "optimizer" in checkpoint:
             optimizer.load_state_dict(checkpoint["optimizer"])
@@ -77,7 +97,10 @@ def main() -> None:
         print(f"resumed {output} at step={start_step}")
     optimizer.zero_grad(set_to_none=True)
     started = time.perf_counter()
+    train_seconds, eval_seconds, train_tokens = 0.0, [], 0
     for step in range(start_step, start_step + args.steps):
+        synchronize(device)
+        step_started = time.perf_counter()
         train_loss = 0.0
         for _ in range(args.gradient_accumulation_steps):
             inputs, targets = make_batch(train_ids, args.batch_size, config.context_length, device)
@@ -86,17 +109,47 @@ def main() -> None:
             train_loss += loss.item() / args.gradient_accumulation_steps
         optimizer.step()
         optimizer.zero_grad(set_to_none=True)
+        synchronize(device)
+        train_seconds += time.perf_counter() - step_started
+        train_tokens += args.gradient_accumulation_steps * args.batch_size * config.context_length
         if (step + 1) % args.eval_interval == 0 or step == start_step + args.steps - 1:
+            eval_started = time.perf_counter()
             evaluation = evaluate_tokens(model, validation_ids, device)
+            synchronize(device)
+            eval_seconds.append(time.perf_counter() - eval_started)
             validation_loss = evaluation["validation_loss"]
-            record = {"step": step + 1, "train_loss": train_loss, **evaluation, "elapsed_seconds": time.perf_counter() - started}
+            record = {"step": step + 1, "train_loss": train_loss, **evaluation, "elapsed_seconds": time.perf_counter() - started, "train_seconds": train_seconds, "eval_seconds": eval_seconds[-1]}
             metrics.append(record)
             print(f"step={step + 1:04d} train_loss={train_loss:.4f} val_loss={validation_loss:.4f} val_ppl={evaluation['perplexity']:.2f} device={device}", flush=True)
             if validation_loss < best_validation_loss:
                 best_validation_loss = validation_loss
-                torch.save({"model": model.state_dict(), "config": config.__dict__, "metrics": metrics, "best_validation_loss": best_validation_loss, "step": step + 1, "seed": args.seed, "corpus_sha256": corpus_sha256, "tokenizer": str(args.tokenizer) if args.tokenizer else "byte"}, args.output_dir / "best_checkpoint.pt")
-    torch.save({"model": model.state_dict(), "config": config.__dict__, "optimizer": optimizer.state_dict(), "rng_state": torch.get_rng_state(), "metrics": metrics, "best_validation_loss": best_validation_loss, "step": start_step + args.steps, "seed": args.seed, "corpus_sha256": corpus_sha256, "tokenizer": str(args.tokenizer) if args.tokenizer else "byte"}, output)
+                best = {"model": model.state_dict(), "config": config.__dict__, "metrics": metrics, "best_validation_loss": best_validation_loss, "step": step + 1, "seed": args.seed, "corpus_sha256": corpus_sha256, "tokenizer": str(args.tokenizer) if args.tokenizer else "byte", "attention_backend": args.attention_backend}
+                # File bytes vary with timing metadata; model_identity does not.
+                if not args.tokenizer:
+                    best["model_identity"] = checkpoint_identity(best)
+                torch.save(best, args.output_dir / "best_checkpoint.pt")
+    final = {"model": model.state_dict(), "config": config.__dict__, "optimizer": optimizer.state_dict(), "rng_state": torch.get_rng_state(), "metrics": metrics, "best_validation_loss": best_validation_loss, "step": start_step + args.steps, "seed": args.seed, "corpus_sha256": corpus_sha256, "tokenizer": str(args.tokenizer) if args.tokenizer else "byte", "attention_backend": args.attention_backend}
+    if not args.tokenizer:
+        final["model_identity"] = checkpoint_identity(final)
+    torch.save(final, output)
     (args.output_dir / "metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+    # Timing and memory of this process only (a resumed run reports its own segment).
+    summary = {
+        "attention_backend": args.attention_backend,
+        "device": device,
+        "steps": args.steps,
+        "train_seconds": train_seconds,
+        "train_tokens": train_tokens,
+        "train_tokens_per_second": train_tokens / train_seconds,
+        "eval_seconds": eval_seconds,
+        "process_peak_rss_bytes": peak_rss_bytes(),
+        # Identity-relevant training hyperparameters (record schema v2).
+        "hyperparameters": {
+            "steps": args.steps, "batch_size": args.batch_size, "gradient_accumulation_steps": args.gradient_accumulation_steps,
+            "eval_interval": args.eval_interval, "learning_rate": 3e-4, "optimizer": "AdamW", "device": device,
+        },
+    }
+    (args.output_dir / "run_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(f"saved {output}")
 
 

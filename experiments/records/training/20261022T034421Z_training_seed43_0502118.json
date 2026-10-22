@@ -1,0 +1,127 @@
+{
+  "record_version": 1,
+  "created_utc": "20261022T034421Z",
+  "experiment": "training",
+  "environment": {
+    "python": "3.12.14",
+    "torch": "2.14.1",
+    "numpy": "2.5.4",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "processor": "Apple M4",
+    "memory_bytes": 17179869184,
+    "cpu_count": 10,
+    "torch_threads": 4,
+    "device": "cpu",
+    "mps_available": true,
+    "cuda_available": false,
+    "git": {
+      "commit": "0502118a1a0af31c8480f6b499d9347916330a79",
+      "branch": "experiments/attention-kv-audit",
+      "dirty": true
+    },
+    "command": "python scripts/record_training_run.py artifacts/runs/science-v2-s43 --code-commit 1fb8f37 --note 'Trained with 1fb8f37 training code plus uncommitted model.py edits later committed as 274722f; the default training path was verified bitwise-identical by retraining seed 42 on the new code.' --training-command 'python scripts/train_tiny.py data/science/train.txt --validation-text data/science/validation.txt --steps 1000 --eval-interval 250 --gradient-accumulation-steps 4 --device cpu --seed 43 --output-dir artifacts/runs/science-v2-s43'"
+  },
+  "settings": {
+    "dtype": "float32",
+    "seed": 43,
+    "model_config": {
+      "vocab_size": 256,
+      "context_length": 128,
+      "embedding_dim": 192,
+      "num_layers": 4,
+      "num_heads": 6,
+      "dropout": 0.0,
+      "positional_encoding": "learned",
+      "norm": "rmsnorm",
+      "activation": "swiglu",
+      "rope_theta": 10000.0
+    },
+    "tokenizer": "byte",
+    "optimizer": "AdamW lr=3e-4 (scripts/train_tiny.py defaults)",
+    "steps": 1000,
+    "training_command": "python scripts/train_tiny.py data/science/train.txt --validation-text data/science/validation.txt --steps 1000 --eval-interval 250 --gradient-accumulation-steps 4 --device cpu --seed 43 --output-dir artifacts/runs/science-v2-s43",
+    "training_code_commit": "1fb8f37",
+    "note": "Trained with 1fb8f37 training code plus uncommitted model.py edits later committed as 274722f; the default training path was verified bitwise-identical by retraining seed 42 on the new code.",
+    "data": {
+      "train": {
+        "path": "data/science/train.txt",
+        "sha256": "19c057053f222c3084fba3693c1c295ea94f6cda1ee5fbf5f917953fcb91ef00"
+      },
+      "validation": {
+        "path": "data/science/validation.txt",
+        "sha256": "e25d4e45706bbf4251129dbb079f3487660c453cf8b34407901350538b23e2e7"
+      },
+      "corpus_sha256_in_checkpoint": "f6642de41672b3cac70017cd5f02312975c0bedfa32be8e79056cf36a48e943f",
+      "manifest": {
+        "split_method": "first approximately 90% of bytes at a paragraph boundary from each document for training; remainder for validation",
+        "sources": [
+          {
+            "name": "darwin-1859",
+            "url": "https://www.gutenberg.org/cache/epub/1228/pg1228.txt",
+            "raw_sha256": "ededa9c0bf8761efed092c303b46c1c92de956838cba6249a33bedfd6d7363b4",
+            "paragraphs": 1322,
+            "train_paragraphs": 701,
+            "validation_bytes": 93406
+          },
+          {
+            "name": "einstein-1924",
+            "url": "https://www.gutenberg.org/cache/epub/30155/pg30155.txt",
+            "raw_sha256": "86ed8156239455cbb6ed33e06097707d3ab7c40d46e9aa5ff32d3c3f94ef68fd",
+            "paragraphs": 564,
+            "train_paragraphs": 490,
+            "validation_bytes": 18704
+          }
+        ],
+        "train_bytes": 1008977,
+        "validation_bytes": 112112,
+        "train_sha256": "19c057053f222c3084fba3693c1c295ea94f6cda1ee5fbf5f917953fcb91ef00",
+        "validation_sha256": "e25d4e45706bbf4251129dbb079f3487660c453cf8b34407901350538b23e2e7"
+      }
+    }
+  },
+  "results": {
+    "metrics": [
+      {
+        "step": 250,
+        "train_loss": 3.125346601009369,
+        "validation_loss": 3.27685190798933,
+        "perplexity": 26.49224127345457,
+        "bits_per_token": 4.727497997383744,
+        "validation_tokens": 112111,
+        "elapsed_seconds": 29.149193541990826
+      },
+      {
+        "step": 500,
+        "train_loss": 3.1471182703971863,
+        "validation_loss": 3.2741675599209956,
+        "perplexity": 26.42122223931517,
+        "bits_per_token": 4.723625301737538,
+        "validation_tokens": 112111,
+        "elapsed_seconds": 58.77116108300106
+      },
+      {
+        "step": 750,
+        "train_loss": 3.054605782032013,
+        "validation_loss": 3.271949987806797,
+        "perplexity": 26.36269619050522,
+        "bits_per_token": 4.72042602144557,
+        "validation_tokens": 112111,
+        "elapsed_seconds": 96.52907974999107
+      },
+      {
+        "step": 1000,
+        "train_loss": 2.851951539516449,
+        "validation_loss": 2.9438789420007883,
+        "perplexity": 18.989362272891913,
+        "bits_per_token": 4.247119550601986,
+        "validation_tokens": 112111,
+        "elapsed_seconds": 131.09946783300256
+      }
+    ],
+    "best_step": 1000,
+    "best_validation_loss": 2.9438789420007883,
+    "best_checkpoint_sha256": "5ef10871bf409763d01ab42d66f6c013ced19da345baa3b8f1181dc76830a205",
+    "final_checkpoint_sha256": "cad6068df97de14c466a2508aca2804d93b0c422028905e4d6c1996fd1c6ea0a"
+  }
+}

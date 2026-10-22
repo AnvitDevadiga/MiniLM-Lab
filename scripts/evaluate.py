@@ -9,7 +9,13 @@ import torch
 
 from minilm_lab.data import load_text, split_tokens
 from minilm_lab.metrics import evaluate_tokens
-from minilm_lab.model import MiniLM, MiniLMConfig
+from minilm_lab.model import (
+    ATTENTION_BACKENDS,
+    DEFAULT_ATTENTION_BACKEND,
+    MiniLM,
+    MiniLMConfig,
+    canonical_backend,
+)
 from minilm_lab.tokenizer import BPETokenizer, ByteTokenizer
 
 
@@ -20,6 +26,10 @@ def main() -> None:
     parser.add_argument("--checkpoint", type=Path, default=Path("artifacts/best_checkpoint.pt"))
     parser.add_argument("--device", choices=("auto", "cpu", "mps"), default="auto")
     parser.add_argument("--output", type=Path, default=Path("artifacts/evaluation.json"))
+    parser.add_argument(
+        "--attention-backend", choices=(*ATTENTION_BACKENDS, "auto"), default=DEFAULT_ATTENTION_BACKEND,
+        help="sdpa (default); use mha to reproduce science-v1 numbers exactly",
+    )
     args = parser.parse_args()
     device = ("mps" if torch.backends.mps.is_available() else "cpu") if args.device == "auto" else args.device
     checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=True)
@@ -31,7 +41,7 @@ def main() -> None:
         ids = torch.tensor(tokenizer.encode(load_text(args.text)), dtype=torch.long)
         _, validation_ids = split_tokens(ids)
     config = MiniLMConfig(**checkpoint["config"])
-    model = MiniLM(config).to(device)
+    model = MiniLM(config).to(device).set_attention_backend(args.attention_backend)
     model.load_state_dict(checkpoint["model"])
     evaluation = evaluate_tokens(model, validation_ids, device)
     # The first token is context; count bytes represented by scored targets.
@@ -40,6 +50,8 @@ def main() -> None:
         "checkpoint": str(args.checkpoint),
         "tokenizer": tokenizer_name,
         "device": device,
+        "attention_backend": canonical_backend(args.attention_backend),
+        "checkpoint_attention_backend": canonical_backend(checkpoint.get("attention_backend")),
         **evaluation,
         "bits_per_byte": evaluation["validation_loss"] * evaluation["validation_tokens"] / scored_bytes / math.log(2),
         "validation_bytes": scored_bytes,
