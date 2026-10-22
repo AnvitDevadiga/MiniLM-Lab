@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="884" height="470" viewBox="0 0 884 470" role="img" aria-labelledby="title desc">
+<title id="title">Reproducibility and verification</title>
+<desc id="desc">Checkpoint files stay local. The repository holds data manifests, training and evaluation records, self-asserted identity attestations, and an audited baseline whose hash is pinned in code. Strict validation accepts a model identity only if it is verified from the checkpoint file or from the pinned baseline.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 10 5 L 0 9 z" fill="#ffffff" stroke="none"/></marker></defs>
+<g fill="#ffffff" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+<rect x="12" y="12" width="220" height="446" rx="3" fill="none" stroke-dasharray="4 3"/>
+<text stroke="none" x="24" y="30" font-size="10.5" font-weight="500" text-anchor="start" dominant-baseline="central">LOCAL ONLY  ·  not distributed</text>
+<rect x="252" y="12" width="340" height="446" rx="3" fill="none" stroke-dasharray="4 3"/>
+<text stroke="none" x="264" y="30" font-size="10.5" font-weight="500" text-anchor="start" dominant-baseline="central">REPOSITORY  ·  versioned, reviewed</text>
+<rect x="612" y="12" width="260" height="446" rx="3" fill="none" stroke-dasharray="4 3"/>
+<text stroke="none" x="624" y="30" font-size="10.5" font-weight="500" text-anchor="start" dominant-baseline="central">VALIDATION</text>
+<rect x="30" y="52" width="184" height="44" rx="3" fill="none"/>
+<text stroke="none" x="122.0" y="66.5" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">train_tiny.py</text>
+<text stroke="none" x="122.0" y="81.5" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">seeded training run</text>
+<path d="M 122 96 L 122 124" fill="none" marker-end="url(#arrow)"/>
+<rect x="30" y="124" width="184" height="58" rx="3" fill="none"/>
+<text stroke="none" x="122.0" y="138.0" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">Checkpoint files</text>
+<text stroke="none" x="122.0" y="153.0" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">best_checkpoint.pt</text>
+<text stroke="none" x="122.0" y="168.0" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">tiny_checkpoint.pt</text>
+<rect x="270" y="52" width="304" height="40" rx="3" fill="none"/>
+<text stroke="none" x="422.0" y="64.5" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">Corpus files and manifests</text>
+<text stroke="none" x="422.0" y="79.5" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">SHA-256 per split</text>
+<rect x="270" y="108" width="304" height="58" rx="3" fill="none"/>
+<text stroke="none" x="422.0" y="122.0" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">Training record  (record_training_run.py)</text>
+<text stroke="none" x="422.0" y="137.0" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">command · seed · data hashes</text>
+<text stroke="none" x="422.0" y="152.0" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">checkpoint SHA-256 · fingerprint</text>
+<rect x="270" y="182" width="304" height="40" rx="3" fill="none"/>
+<text stroke="none" x="422.0" y="194.5" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">Evaluation record</text>
+<text stroke="none" x="422.0" y="209.5" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">joined by checkpoint SHA-256</text>
+<rect x="270" y="238" width="304" height="40" rx="3" fill="none"/>
+<text stroke="none" x="422.0" y="250.5" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">Identity attestations</text>
+<text stroke="none" x="422.0" y="265.5" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">self-asserted: compared, never trusted</text>
+<rect x="270" y="300" width="304" height="40" rx="3" fill="none"/>
+<text stroke="none" x="422.0" y="312.5" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">Audited baseline  (build_identity_baseline.py)</text>
+<text stroke="none" x="422.0" y="327.5" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">checkpoint SHA-256 → model fingerprint</text>
+<rect x="270" y="376" width="304" height="40" rx="3" fill="none"/>
+<text stroke="none" x="422.0" y="388.5" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">BASELINE_SHA256 pin</text>
+<text stroke="none" x="422.0" y="403.5" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">constant in records.py (reviewed code)</text>
+<path d="M 422 340 L 422 376" fill="none" stroke-dasharray="4 3"/>
+<text stroke="none" x="430" y="358" font-size="10.5" font-weight="400" text-anchor="start" dominant-baseline="central" fill-opacity="0.68">hash of</text>
+<path d="M 214 150 L 270 150" fill="none" marker-end="url(#arrow)"/>
+<path d="M 122 182 L 122 320 L 270 320" fill="none" marker-end="url(#arrow)"/>
+<text stroke="none" x="130" y="226" font-size="10.5" font-weight="400" text-anchor="start" dominant-baseline="central" fill-opacity="0.68">bytes = recorded</text>
+<text stroke="none" x="130" y="242" font-size="10.5" font-weight="400" text-anchor="start" dominant-baseline="central" fill-opacity="0.68">SHA-256, then</text>
+<text stroke="none" x="130" y="258" font-size="10.5" font-weight="400" text-anchor="start" dominant-baseline="central" fill-opacity="0.68">fingerprint from</text>
+<text stroke="none" x="130" y="274" font-size="10.5" font-weight="400" text-anchor="start" dominant-baseline="central" fill-opacity="0.68">tensors</text>
+<path d="M 574 74 L 602 74" fill="none"/>
+<path d="M 574 137 L 602 137" fill="none"/>
+<path d="M 574 202 L 602 202" fill="none"/>
+<path d="M 574 258 L 602 258" fill="none"/>
+<path d="M 574 320 L 602 320" fill="none"/>
+<path d="M 602 320 L 602 74 L 630 74" fill="none" marker-end="url(#arrow)"/>
+<rect x="630" y="52" width="204" height="44" rx="3" fill="none"/>
+<text stroke="none" x="732.0" y="66.5" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">validate_records.py</text>
+<text stroke="none" x="732.0" y="81.5" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">--strict</text>
+<rect x="630" y="128" width="204" height="96" rx="3" fill="none"/>
+<text stroke="none" x="732.0" y="146.0" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">Evidence per checkpoint</text>
+<text stroke="none" x="732.0" y="161.0" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">artifact_verified  ·  pass</text>
+<text stroke="none" x="732.0" y="176.0" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">trusted_baseline_verified  ·  pass</text>
+<text stroke="none" x="732.0" y="191.0" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">metadata_consistent_only  ·  fail</text>
+<text stroke="none" x="732.0" y="206.0" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">unverified  ·  fail</text>
+<path d="M 732 96 L 732 128" fill="none" marker-end="url(#arrow)"/>
+<rect x="630" y="256" width="204" height="44" rx="3" fill="none"/>
+<text stroke="none" x="732.0" y="270.5" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">Report builder</text>
+<text stroke="none" x="732.0" y="285.5" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">fails closed on any problem</text>
+<path d="M 732 224 L 732 256" fill="none" marker-end="url(#arrow)"/>
+<text stroke="none" x="732" y="326" font-size="10.5" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">baseline trusted only if</text>
+<text stroke="none" x="732" y="342" font-size="10.5" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">its hash equals the pin</text>
+<path d="M 60 182 L 60 440 L 852 440 L 852 74 L 834 74" fill="none" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+<text stroke="none" x="422" y="430" font-size="10.5" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">if present: rehash bytes, recompute fingerprint</text>
+</g>
+</svg>

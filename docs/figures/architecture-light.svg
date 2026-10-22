@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="712" viewBox="0 0 720 712" role="img" aria-labelledby="title desc">
+<title id="title">MiniLM architecture</title>
+<desc id="desc">Decoder-only Transformer: byte token embedding plus learned position embedding, four pre-norm decoder blocks (RMSNorm, causal self-attention, residual add, RMSNorm, SwiGLU MLP, residual add), final RMSNorm and an LM head tied to the token embedding.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 10 5 L 0 9 z" fill="#000000" stroke="none"/></marker></defs>
+<g fill="#000000" stroke="#000000" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+<text stroke="none" x="210" y="18" font-size="12" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">next-byte logits  (B, T, 256)</text>
+<path d="M 210 52 L 210 30" fill="none" marker-end="url(#arrow)"/>
+<rect x="95" y="52" width="230" height="40" rx="3" fill="none"/>
+<text stroke="none" x="210.0" y="64.5" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">Linear (LM head)</text>
+<text stroke="none" x="210.0" y="79.5" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">192 → 256, no bias</text>
+<path d="M 210 120 L 210 92" fill="none" marker-end="url(#arrow)"/>
+<rect x="95" y="120" width="230" height="30" rx="3" fill="none"/>
+<text stroke="none" x="210.0" y="135.0" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">RMSNorm</text>
+<rect x="52" y="168" width="298" height="372" rx="3" fill="none" stroke-dasharray="4 3"/>
+<text stroke="none" x="64" y="184" font-size="12" font-weight="500" text-anchor="start" dominant-baseline="central">Decoder block  × 4</text>
+<circle cx="210" cy="210" r="9" fill="none"/>
+<path d="M 204 210 L 216 210 M 210 204 L 210 216" fill="none"/>
+<path d="M 210 201 L 210 150" fill="none" marker-end="url(#arrow)"/>
+<rect x="95" y="238" width="230" height="42" rx="3" fill="none"/>
+<text stroke="none" x="210.0" y="251.5" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">SwiGLU MLP</text>
+<text stroke="none" x="210.0" y="266.5" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">192 → 768 → 192</text>
+<path d="M 210 238 L 210 219" fill="none" marker-end="url(#arrow)"/>
+<rect x="95" y="304" width="230" height="28" rx="3" fill="none"/>
+<text stroke="none" x="210.0" y="318.0" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">RMSNorm</text>
+<path d="M 210 304 L 210 280" fill="none" marker-end="url(#arrow)"/>
+<path d="M 210 363 L 210 332" fill="none" marker-end="url(#arrow)"/>
+<path d="M 210 352 L 78 352 L 78 210 L 201 210" fill="none" marker-end="url(#arrow)"/>
+<circle cx="210" cy="372" r="9" fill="none"/>
+<path d="M 204 372 L 216 372 M 210 366 L 210 378" fill="none"/>
+<rect x="95" y="400" width="230" height="42" rx="3" fill="none"/>
+<text stroke="none" x="210.0" y="413.5" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">Causal self-attention</text>
+<text stroke="none" x="210.0" y="428.5" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">6 heads, d_head = 32</text>
+<path d="M 210 400 L 210 381" fill="none" marker-end="url(#arrow)"/>
+<rect x="95" y="466" width="230" height="28" rx="3" fill="none"/>
+<text stroke="none" x="210.0" y="480.0" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">RMSNorm</text>
+<path d="M 210 466 L 210 442" fill="none" marker-end="url(#arrow)"/>
+<path d="M 210 573 L 210 494" fill="none" marker-end="url(#arrow)"/>
+<path d="M 210 515 L 78 515 L 78 372 L 201 372" fill="none" marker-end="url(#arrow)"/>
+<circle cx="210" cy="582" r="9" fill="none"/>
+<path d="M 204 582 L 216 582 M 210 576 L 210 588" fill="none"/>
+<rect x="95" y="612" width="230" height="40" rx="3" fill="none"/>
+<text stroke="none" x="210.0" y="624.5" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">Token embedding</text>
+<text stroke="none" x="210.0" y="639.5" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">256 × 192</text>
+<path d="M 210 612 L 210 591" fill="none" marker-end="url(#arrow)"/>
+<rect x="400" y="562" width="260" height="40" rx="3" fill="none"/>
+<text stroke="none" x="530.0" y="574.5" font-size="13" font-weight="500" text-anchor="middle" dominant-baseline="central">Learned position embedding</text>
+<text stroke="none" x="530.0" y="589.5" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">128 × 192 · added unless RoPE</text>
+<path d="M 400 582 L 219 582" fill="none" marker-end="url(#arrow)"/>
+<text stroke="none" x="210" y="690" font-size="12" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">input bytes  (B, T),  T ≤ 128</text>
+<path d="M 210 680 L 210 652" fill="none" marker-end="url(#arrow)"/>
+<path d="M 95 632 L 30 632 L 30 72 L 95 72" fill="none" stroke-dasharray="4 3"/>
+<text stroke="none" x="20" y="352" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68" transform="rotate(-90 20 352)">shared weights (tied)</text>
+<path d="M 325 421 L 400 421" fill="none" stroke-dasharray="1.5 3"/>
+<rect x="400" y="312" width="300" height="226" rx="4" fill="none"/>
+<text stroke="none" x="412" y="328" font-size="12" font-weight="500" text-anchor="start" dominant-baseline="central">Causal self-attention</text>
+<path d="M 550 352 L 550 340" fill="none" marker-end="url(#arrow)"/>
+<rect x="420" y="352" width="260" height="26" rx="3" fill="none"/>
+<text stroke="none" x="550.0" y="365.0" font-size="12" font-weight="400" text-anchor="middle" dominant-baseline="central">out_proj  ·  Linear 192 → 192</text>
+<rect x="420" y="394" width="260" height="26" rx="3" fill="none"/>
+<text stroke="none" x="550.0" y="407.0" font-size="12" font-weight="400" text-anchor="middle" dominant-baseline="central">causal attention  (selectable backend)</text>
+<rect x="420" y="438" width="260" height="26" rx="3" fill="none" stroke-dasharray="4 3"/>
+<text stroke="none" x="550.0" y="451.0" font-size="12" font-weight="400" text-anchor="middle" dominant-baseline="central">RoPE on Q, K  (positional = rope)</text>
+<rect x="420" y="482" width="260" height="26" rx="3" fill="none"/>
+<text stroke="none" x="550.0" y="495.0" font-size="12" font-weight="400" text-anchor="middle" dominant-baseline="central">in_proj  ·  Linear 192 → 576 → Q, K, V</text>
+<path d="M 550 526 L 550 508" fill="none" marker-end="url(#arrow)"/>
+<path d="M 550 482 L 550 464" fill="none" marker-end="url(#arrow)"/>
+<path d="M 550 438 L 550 420" fill="none" marker-end="url(#arrow)"/>
+<path d="M 550 394 L 550 378" fill="none" marker-end="url(#arrow)"/>
+<path d="M 325 259 L 400 259" fill="none" stroke-dasharray="1.5 3"/>
+<rect x="400" y="214" width="300" height="90" rx="4" fill="none"/>
+<text stroke="none" x="412" y="230" font-size="12" font-weight="500" text-anchor="start" dominant-baseline="central">SwiGLU MLP</text>
+<text stroke="none" x="550" y="258" font-size="13" font-weight="400" text-anchor="middle" dominant-baseline="central">down( SiLU(gate(n)) ⊙ up(n) )</text>
+<text stroke="none" x="550" y="282" font-size="11" font-weight="400" text-anchor="middle" dominant-baseline="central" fill-opacity="0.68">gate, up: 192 → 768   ·   down: 768 → 192</text>
+</g>
+</svg>
