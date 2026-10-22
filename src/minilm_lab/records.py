@@ -28,6 +28,19 @@ PROTOCOLS = {
 # train_tiny.py defaults (unchanged since 1fb8f37); used only to read records that
 # predate explicit hyperparameters (record_version 1). Guarded by a test.
 LEGACY_TRAIN_DEFAULTS = {"steps": 100, "batch_size": 8, "gradient_accumulation_steps": 1, "eval_interval": 25, "device": "auto"}
+# Model-identity evidence levels, strongest first. Only the first two count as verification.
+ARTIFACT_VERIFIED = "artifact_verified"
+BASELINE_VERIFIED = "trusted_baseline_verified"
+METADATA_ONLY = "metadata_consistent_only"
+UNVERIFIED = "unverified"
+VERIFIED = (ARTIFACT_VERIFIED, BASELINE_VERIFIED)
+# Audited baseline of model identities for historical checkpoints, built by
+# scripts/build_identity_baseline.py from the original checkpoint files after checking
+# their bytes against the recorded SHA-256. It is trusted only if its SHA-256 equals the
+# value pinned here, so any change to it is a reviewable code change. This is an
+# integrity anchor inside this repository, not a cryptographic signature.
+BASELINE_PATH = "experiments/baselines/model_identity_baseline.json"
+BASELINE_SHA256 = "02992d75cde737c37953cc7156cdbf08d43b910ad4347fae9d4bab178fdd2439"
 LEGACY_FLAGS = {"--steps": "steps", "--batch-size": "batch_size", "--gradient-accumulation-steps": "gradient_accumulation_steps",
                 "--eval-interval": "eval_interval", "--device": "device"}
 
@@ -44,14 +57,21 @@ def canonical_json_digest(value) -> str:
     return sha256_bytes(json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode())
 
 
+_ARTIFACT_CACHE: dict = {}
+
+
 @dataclass
 class Store:
     repo_root: Path
     records_root: Path
     records: dict[str, dict]
     superseded: dict[str, dict]
+    artifact_root: Path | None = None  # where checkpoint artifacts are looked up (default: repo_root)
+    baseline_path: Path | None = None  # None: no audited baseline available
     _file_hashes: dict = field(default_factory=dict)
     _commits: dict = field(default_factory=dict)
+    _evidence: dict = field(default_factory=dict)
+    _baseline: tuple | None = None
 
     def current(self, directory: str) -> list[tuple[str, dict]]:
         """(key, record) in time order, excluding superseded records."""
@@ -70,7 +90,9 @@ class Store:
         return self._commits[ref]
 
 
-def load_store(repo_root: Path, records_root: Path | None = None) -> Store:
+def load_store(repo_root: Path, records_root: Path | None = None, artifact_root: Path | None = None,
+               baseline_path: Path | None | bool = True) -> Store:
+    """baseline_path=True uses the committed baseline; None/False disables it (for tests)."""
     records_root = records_root or repo_root / "experiments/records"
     records = {}
     for path in sorted(records_root.glob("*/*.json")):
@@ -81,7 +103,8 @@ def load_store(repo_root: Path, records_root: Path | None = None) -> Store:
         records[key] = record
     index = records_root / "SUPERSEDED.json"
     superseded = json.loads(index.read_text())["records"] if index.exists() else {}
-    return Store(repo_root, records_root, records, superseded)
+    baseline = repo_root / BASELINE_PATH if baseline_path is True else (baseline_path or None)
+    return Store(repo_root, records_root, records, superseded, artifact_root or repo_root, baseline)
 
 
 # ---------------------------------------------------------------- datasets
@@ -196,61 +219,186 @@ def check_training(store: Store, key: str, record: dict, problems: list[str]) ->
         problems.append(f"{key}: no checkpoint hash")
 
 
+def duplicate_conflicts(store: Store, first: tuple[str, dict], other: tuple[str, dict]) -> list[str]:
+    """Reasons two records in the same experiment slot cannot be the same experiment."""
+    (key_a, a), (key_b, b) = first, other
+    reasons = []
+    if training_identity(a).config_sha256 != training_identity(b).config_sha256:
+        reasons.append("configuration differs")
+    if training_outcome(a) != training_outcome(b):
+        reasons.append("recorded losses or selected step differ")
+    identity_a, identity_b = resolve_identity(store, key_a)[0], resolve_identity(store, key_b)[0]
+    if identity_a.fingerprint is None or identity_b.fingerprint is None:
+        if a["results"].get("best_checkpoint_sha256") != b["results"].get("best_checkpoint_sha256"):
+            reasons.append("different checkpoint files without established model identities")
+        if (identity_a.sources and identity_a.fingerprint is None) or (identity_b.sources and identity_b.fingerprint is None):
+            reasons.append("model identity sources disagree")
+    elif identity_a.fingerprint != identity_b.fingerprint:
+        reasons.append("model identities differ")
+    return reasons
+
+
 def select_training(store: Store, problems: list[str]) -> dict[TrainingIdentity, dict]:
-    """One canonical record per experiment identity (rules in docs/RECORD_SCHEMA.md)."""
-    groups: dict[TrainingIdentity, list[tuple[str, dict]]] = {}
+    """One record per experiment (rules in docs/RECORD_SCHEMA.md).
+
+    Records are grouped by experiment slot (protocol, canonical backend, seed, dataset)
+    after backend canonicalization. Members of a slot are duplicates of one experiment
+    only if configuration, outcomes and resolved checkpoint identity all agree; then the
+    earliest record represents them (they are identical, so the choice changes nothing).
+    Any disagreement is a conflict: no record is selected and validation fails until an
+    explicit supersession resolves it.
+    """
+    slots: dict[tuple, list[tuple[str, dict]]] = {}
     for key, record in store.current("training"):
         before = len(problems)
         check_training(store, key, record, problems)
         if len(problems) == before:
-            groups.setdefault(training_identity(record), []).append((key, record))
+            identity = training_identity(record)
+            slots.setdefault((identity.protocol, identity.backend, identity.seed, identity.dataset_sha256), []).append((key, record))
     selected = {}
-    for identity, members in groups.items():
+    for (protocol, backend, seed, _), members in slots.items():
         members.sort(key=lambda item: (item[1]["created_utc"], item[0]))
-        canonical_key, canonical = members[0]
-        conflicts = []
-        for key, record in members[1:]:
-            same_outcome = training_outcome(record) == training_outcome(canonical)
-            a, b = record["results"].get("best_model_identity_sha256"), canonical["results"].get("best_model_identity_sha256")
-            if not same_outcome or (a and b and a != b):
-                conflicts.append(key)
+        reasons = {key: duplicate_conflicts(store, members[0], (key, record)) for key, record in members[1:]}
+        conflicts = {key: why for key, why in reasons.items() if why}
         if conflicts:
-            problems.append(f"conflicting training records for {identity.protocol}/{identity.backend}/seed {identity.seed}: "
-                            f"{canonical_key} vs {', '.join(conflicts)} (supersede one explicitly)")
+            detail = "; ".join(f"{key}: {', '.join(why)}" for key, why in conflicts.items())
+            problems.append(f"conflicting training records for {protocol}/{backend}/seed {seed} ({members[0][0]} vs {detail}); "
+                            "supersede one explicitly")
             continue
+        canonical = members[0][1]
         canonical["_replicates"] = [key for key, _ in members[1:]]
-        canonical["_identity"] = identity
-        selected[identity] = canonical
+        canonical["_identity"] = training_identity(canonical)
+        selected[canonical["_identity"]] = canonical
     return selected
 
 
 # ---------------------------------------------------------------- evaluation provenance
 
 
-def attested_identities(store: Store, problems: list[str]) -> dict[str, str]:
-    """checkpoint file SHA-256 -> model identity, from current attestation records."""
-    attested: dict[str, str] = {}
+class IdentityEvidence(NamedTuple):
+    fingerprint: str | None  # None when unknown or when sources disagree
+    status: str  # one of ARTIFACT_VERIFIED, BASELINE_VERIFIED, METADATA_ONLY, UNVERIFIED
+    sources: dict  # source name -> fingerprint, as found
+
+
+def load_baseline(store: Store, problems: list[str]) -> dict:
+    """Audited baseline entries keyed by checkpoint SHA-256, only if the file matches its pin."""
+    if store._baseline is None:
+        issues: list[str] = []
+        entries: dict = {}
+        path = store.baseline_path
+        if path is not None and path.is_file():
+            data = path.read_bytes()
+            if sha256_bytes(data) != BASELINE_SHA256:
+                issues.append(f"{BASELINE_PATH}: SHA-256 {sha256_bytes(data)[:12]} does not match the pinned audited baseline; not trusted")
+            else:
+                entries = json.loads(data)["entries"]
+        store._baseline = (entries, issues)
+    entries, issues = store._baseline
+    problems.extend(issue for issue in issues if issue not in problems)
+    return entries
+
+
+def checkpoint_artifact(store: Store, record: dict, kind: str) -> Path | None:
+    tokens = shlex.split(record["settings"].get("training_command", ""))
+    if "--output-dir" not in tokens:
+        return None
+    path = store.artifact_root / tokens[tokens.index("--output-dir") + 1] / ("best_checkpoint.pt" if kind == "best" else "tiny_checkpoint.pt")
+    return path if path.is_file() else None
+
+
+def artifact_fingerprint(path: Path, expected_sha256: str) -> tuple[str, str | None]:
+    """(file SHA-256, model identity recomputed from tensors if the bytes match the expectation)."""
+    stat = path.stat()
+    key = (str(path.resolve()), stat.st_size, stat.st_mtime_ns)
+    if key not in _ARTIFACT_CACHE:
+        _ARTIFACT_CACHE[key] = [sha256_bytes(path.read_bytes()), None]
+    entry = _ARTIFACT_CACHE[key]
+    if entry[0] == expected_sha256 and entry[1] is None:
+        import torch  # deferred: only needed when artifacts are present
+
+        from .identity import checkpoint_identity
+
+        entry[1] = checkpoint_identity(torch.load(path, map_location="cpu", weights_only=True))["sha256"]
+    return entry[0], entry[1] if entry[0] == expected_sha256 else None
+
+
+def resolve_identity(store: Store, key: str, kind: str = "best") -> tuple[IdentityEvidence, list[str]]:
+    """Effective model identity of a training record's checkpoint and the evidence behind it.
+
+    Sources: the record's declared fingerprint, attestation rows for the same checkpoint
+    hash, the pinned audited baseline, and the checkpoint artifact itself (bytes checked
+    against the recorded SHA-256, fingerprint recomputed from its tensors). All available
+    sources must agree; a disagreement yields no fingerprint and a problem.
+    """
+    if (key, kind) in store._evidence:
+        return store._evidence[(key, kind)]
+    problems: list[str] = []
+    record = store.records[key]
+    expected = record["results"].get(f"{kind}_checkpoint_sha256")
+    sources: dict[str, str] = {}
+    declared = record["results"].get(f"{kind}_model_identity_sha256")
+    if declared:
+        sources["declared"] = declared
+    attested = set()
+    for attestation_key, attestation in store.current("identity"):
+        for row in attestation["results"]["attested"]:
+            if expected and row["checkpoint_sha256"] == expected:
+                attested.add(row["model_identity_sha256"])
+    if len(attested) > 1:
+        problems.append(f"{key}: {kind} checkpoint attested with {len(attested)} different model identities")
+    elif attested:
+        sources["attested"] = attested.pop()
+    baseline = load_baseline(store, problems).get(expected or "")
+    if baseline:
+        sources["baseline"] = baseline["model_identity_sha256"]
+    artifact = checkpoint_artifact(store, record, kind) if expected else None
+    if artifact is not None:
+        file_sha, fingerprint = artifact_fingerprint(artifact, expected)
+        if fingerprint is None:
+            problems.append(f"{key}: {kind} checkpoint {artifact.name} bytes ({file_sha[:12]}) do not match the recorded SHA-256 ({expected[:12]})")
+        else:
+            sources["artifact"] = fingerprint
+    values = set(sources.values())
+    if len(values) > 1:
+        detail = ", ".join(f"{name}={value[:12]}" for name, value in sorted(sources.items()))
+        problems.append(f"{key}: {kind} model identity sources disagree ({detail})")
+        evidence = IdentityEvidence(None, UNVERIFIED, sources)
+    elif not values:
+        evidence = IdentityEvidence(None, UNVERIFIED, sources)
+    elif "artifact" in sources and not any("artifact" in p and "do not match" in p for p in problems):
+        evidence = IdentityEvidence(values.pop(), ARTIFACT_VERIFIED, sources)
+    elif "baseline" in sources:
+        evidence = IdentityEvidence(values.pop(), BASELINE_VERIFIED, sources)
+    else:
+        evidence = IdentityEvidence(values.pop(), METADATA_ONLY, sources)
+    if any("do not match the recorded" in p for p in problems):
+        evidence = IdentityEvidence(None, UNVERIFIED, sources)
+    store._evidence[(key, kind)] = (evidence, problems)
+    return evidence, problems
+
+
+def check_attestations(store: Store, problems: list[str]) -> None:
+    """Attestation rows must point at current training records and their recorded hashes."""
     for key, record in store.current("identity"):
         for row in record["results"]["attested"]:
             training = store.records.get(row["training_record"])
             if training is None or row["training_record"] in store.superseded:
                 problems.append(f"{key}: attests {row['training_record']}, which is not a current training record")
-                continue
-            if training["results"].get(f"{row['kind']}_checkpoint_sha256") != row["checkpoint_sha256"]:
+            elif training["results"].get(f"{row['kind']}_checkpoint_sha256") != row["checkpoint_sha256"]:
                 problems.append(f"{key}: {row['kind']} checkpoint hash differs from {row['training_record']}")
-            previous = attested.setdefault(row["checkpoint_sha256"], row["model_identity_sha256"])
-            if previous != row["model_identity_sha256"]:
-                problems.append(f"{key}: checkpoint {row['checkpoint_sha256'][:12]} attested with two model identities")
         for row in record["results"].get("regeneration_checks", []):
-            original = attested.get(row["original_checkpoint_sha256"])
-            if row["model_identity_equal"] != (original == row["model_identity_sha256"]):
-                problems.append(f"{key}: regeneration check for {row['training_record']} is inconsistent with its attestation")
-    return attested
+            training = row["training_record"]
+            if training not in store.records or training in store.superseded:
+                problems.append(f"{key}: regeneration check for unknown training record {training}")
+                continue
+            evidence, _ = resolve_identity(store, training)
+            if evidence.fingerprint is None or row["model_identity_equal"] != (evidence.fingerprint == row["model_identity_sha256"]):
+                problems.append(f"{key}: regeneration check for {training} is inconsistent with its resolved identity")
 
 
 def model_identity_of(store: Store, training: dict) -> str | None:
-    own = training["results"].get("best_model_identity_sha256")
-    return own or attested_identities(store, []).get(training["results"].get("best_checkpoint_sha256"))
+    return resolve_identity(store, training["_key"])[0].fingerprint
 
 
 def training_by_checkpoint(store: Store) -> dict[str, list[tuple[str, dict]]]:
@@ -324,6 +472,46 @@ def check_evaluation(store: Store, key: str, record: dict, problems: list[str], 
 # ---------------------------------------------------------------- benchmark raw samples
 
 
+# Stored KV-cache ratios and how they are derived. Each is
+#   median over repeats of the uncached mode's total generation time (ms)
+#   ÷ median over repeats of the cached mode's total generation time (ms),
+# where a repeat's total is the sum of its per-step seconds × 1000 (prefill included).
+# Unitless; > 1 means the cache is faster. Records before the first release name the
+# legacy MHA mode "uncached_default".
+KV_RATIOS = {
+    "speedup_cached_vs_uncached_sdpa": "uncached_sdpa",
+    "speedup_cached_vs_uncached_mha": "uncached_mha",
+    "speedup_cached_vs_uncached_default": "uncached_default",
+}
+RATIO_TOLERANCE = 1e-12  # relative; derived and stored values come from identical arithmetic
+
+
+def positive_finite(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value > 0
+
+
+def kv_total_ms_median(mode: dict) -> float:
+    """Median total generation time of a mode: from raw samples if present, else the stored summary."""
+    if "raw" in mode:
+        return summarize([1000 * sum(steps) for steps in mode["raw"]["step_seconds"]])["median"]
+    return mode["total_ms"]["median"]
+
+
+def kv_speedups(row: dict) -> dict[str, float]:
+    """Derived cache speedups for one KV scenario; raises ValueError on invalid timings."""
+    cached = kv_total_ms_median(row["cached"])
+    if not positive_finite(cached):
+        raise ValueError(f"cached median total time {cached!r} is not a positive finite number")
+    ratios = {}
+    for name, mode in KV_RATIOS.items():
+        if mode in row:
+            uncached = kv_total_ms_median(row[mode])
+            if not positive_finite(uncached):
+                raise ValueError(f"{mode} median total time {uncached!r} is not a positive finite number")
+            ratios[name] = uncached / cached
+    return ratios
+
+
 def kv_summary_from_raw(raw: dict, batch: int, new_tokens: int) -> dict:
     """KV-cache mode summaries recomputed from per-repeat, per-step seconds."""
     runs = raw["step_seconds"]
@@ -345,27 +533,78 @@ def _close(a, b) -> bool:
     return math.isclose(a, b, rel_tol=1e-12, abs_tol=0.0)
 
 
-def check_benchmark(key: str, record: dict, problems: list[str]) -> None:
+def check_kv(key: str, record: dict, problems: list[str], require_raw: bool) -> None:
+    """KV-cache records: raw samples (current) or summaries (documented legacy rule), and derived ratios."""
+    settings = record["settings"]
+    window = record["results"]["window"]
+    scenarios = [(row, row["batch"], settings["new_tokens"]) for row in record["results"]["grid"]]
+    scenarios.append((window, window["batch"], window["new_tokens"]))
+    for row, batch, new_tokens in scenarios:
+        where = f"{key} B={batch} prompt={row.get('prompt_len')}"
+        valid = True
+        for mode in settings["modes"]:
+            entry = row[mode]
+            if "raw" not in entry:
+                if require_raw:
+                    problems.append(f"{key}: no raw per-repeat timing samples (historical records must be superseded)")
+                    return
+                # Legacy rule: summary-only records are checked for internal consistency only.
+                values = [entry["total_ms"][stat] for stat in ("median", "p95", "min", "max", "mean")]
+                if not all(positive_finite(v) for v in values):
+                    problems.append(f"{where}: {mode} summary contains non-positive or non-finite times")
+                    valid = False
+                continue
+            runs = entry["raw"]["step_seconds"]
+            if len(runs) != settings["repeats"] or any(len(steps) != new_tokens for steps in runs):
+                problems.append(f"{where}: raw sample count does not match repeats x tokens ({mode})")
+                valid = False
+                continue
+            if not all(positive_finite(step) for steps in runs for step in steps):
+                problems.append(f"{where}: {mode} raw samples contain non-positive or non-finite times")
+                valid = False
+                continue
+            recomputed = kv_summary_from_raw(entry["raw"], batch, new_tokens)
+            if not all(_close(recomputed[name], entry[name]) for name in recomputed):
+                problems.append(f"{key}: {mode} B={batch} summaries differ from raw samples")
+        if not valid:
+            continue
+        derived = kv_speedups(row)
+        for name, value in derived.items():
+            stored = row.get(name)
+            if stored is None:
+                continue
+            if not positive_finite(stored) or not math.isclose(stored, value, rel_tol=RATIO_TOLERANCE, abs_tol=0.0):
+                problems.append(f"{where}: stored {name} {stored!r} differs from derived {value:.6g}")
+
+
+def check_legacy_kv(key: str, record: dict, problems: list[str]) -> None:
+    """Legacy single-prompt KV benchmark: medians, speedup and tokens/s derived from its samples."""
+    import statistics
+
+    results = record["results"]
+    medians = {}
+    for mode in ("uncached", "cached"):
+        samples = results[f"{mode}_seconds_samples"]
+        if not samples or not all(positive_finite(s) for s in samples):
+            problems.append(f"{key}: {mode} samples contain non-positive or non-finite times")
+            return
+        medians[mode] = statistics.median(samples)
+        if not math.isclose(results[f"{mode}_seconds"], medians[mode], rel_tol=RATIO_TOLERANCE):
+            problems.append(f"{key}: stored {mode}_seconds differs from the median of its samples")
+        if not math.isclose(results[f"{mode}_tokens_per_second"], results["generated_tokens"] / medians[mode], rel_tol=RATIO_TOLERANCE):
+            problems.append(f"{key}: stored {mode}_tokens_per_second differs from derived value")
+    derived = medians["uncached"] / medians["cached"]
+    if not positive_finite(results["speedup"]) or not math.isclose(results["speedup"], derived, rel_tol=RATIO_TOLERANCE):
+        problems.append(f"{key}: stored speedup {results['speedup']!r} differs from derived {derived:.6g}")
+
+
+def check_benchmark(key: str, record: dict, problems: list[str], legacy: bool = False) -> None:
     experiment, settings = record["experiment"], record["settings"]
     for name in ("warmup", "repeats", "seed"):
         if name not in settings:
             problems.append(f"{key}: benchmark settings lack {name}")
     if experiment == "kv_cache_scaling":
-        if "raw" not in record["results"]["grid"][0]["cached"]:
-            problems.append(f"{key}: no raw per-repeat timing samples (historical records must be superseded)")
-            return
-        scenarios = [(row, row["batch"], settings["new_tokens"]) for row in record["results"]["grid"]]
-        window = record["results"]["window"]
-        scenarios.append((window, window["batch"], window["new_tokens"]))
-        for row, batch, new_tokens in scenarios:
-            for mode in settings["modes"]:
-                raw = row[mode]["raw"]
-                if len(raw["step_seconds"]) != settings["repeats"] or any(len(s) != new_tokens for s in raw["step_seconds"]):
-                    problems.append(f"{key}: raw sample count does not match repeats x tokens ({mode}, B={batch})")
-                    continue
-                recomputed = kv_summary_from_raw(raw, batch, new_tokens)
-                if not all(_close(recomputed[name], row[mode][name]) for name in recomputed):
-                    problems.append(f"{key}: {mode} B={batch} summaries differ from raw samples")
+        check_kv(key, record, problems, require_raw=not legacy)
     elif experiment == "attention_backends":
         for row in record["results"]:
             runs = row["samples_seconds"]
@@ -387,14 +626,59 @@ def check_benchmark(key: str, record: dict, problems: list[str]) -> None:
 # ---------------------------------------------------------------- whole-store validation
 
 
-def validate_store(store: Store) -> list[str]:
-    problems: list[str] = []
+def check_supersession(store: Store, problems: list[str]) -> None:
+    """Each entry: both records exist, same kind and experiment, no cycle, chain ends at a current record."""
     for key, entry in store.superseded.items():
-        for path in (key, entry["superseded_by"]):
-            if path not in store.records:
-                problems.append(f"SUPERSEDED.json names a missing record: {path}")
-        if entry["superseded_by"] == key:
+        target = entry.get("superseded_by")
+        if key not in store.records or target not in store.records:
+            problems.append(f"SUPERSEDED.json: {key} -> {target}: both records must exist")
+            continue
+        if key == target:
             problems.append(f"SUPERSEDED.json: {key} supersedes itself")
+            continue
+        old, new = store.records[key], store.records[target]
+        if key.split("/")[0] != target.split("/")[0] or old["experiment"] != new["experiment"]:
+            problems.append(f"SUPERSEDED.json: {key} and {target} are different kinds of record")
+        if old["experiment"] == "training":
+            if old["settings"].get("seed") != new["settings"].get("seed") or (
+                canonical_backend(old["settings"].get("attention_backend")) != canonical_backend(new["settings"].get("attention_backend"))):
+                problems.append(f"SUPERSEDED.json: {target} is not the same seed and backend as {key}")
+        elif old["experiment"] in {"attention_backends", "kv_cache_scaling", "training_step"}:
+            if (old["environment"]["device"], old["settings"].get("dtype")) != (new["environment"]["device"], new["settings"].get("dtype")):
+                problems.append(f"SUPERSEDED.json: {target} is not the same device and dtype as {key}")
+        elif old["experiment"] == "evaluation" and NAME.match(Path(key).name)["name"] != NAME.match(Path(target).name)["name"]:
+            problems.append(f"SUPERSEDED.json: {target} is not the same evaluation as {key}")
+        seen, current = {key}, target
+        while current in store.superseded:
+            if current in seen:
+                problems.append(f"SUPERSEDED.json: supersession cycle through {key}")
+                break
+            seen.add(current)
+            current = store.superseded[current].get("superseded_by")
+            if current not in store.records:
+                problems.append(f"SUPERSEDED.json: chain from {key} ends at a missing record")
+                break
+
+
+def identity_evidence(store: Store, problems: list[str]) -> dict[tuple[str, str], IdentityEvidence]:
+    """Resolve best and final checkpoint identities of every current training record once."""
+    evidence = {}
+    for key, _ in store.current("training"):
+        for kind in ("best", "final"):
+            found, issues = resolve_identity(store, key, kind)
+            evidence[(key, kind)] = found
+            problems.extend(issue for issue in issues if issue not in problems)
+    return evidence
+
+
+def validate_store(store: Store, strict: bool = False, require_artifacts: bool = False) -> list[str]:
+    """All problems in a record store.
+
+    strict: every current training checkpoint must be artifact_verified or
+    trusted_baseline_verified. require_artifacts: every one must be artifact_verified.
+    """
+    problems: list[str] = []
+    check_supersession(store, problems)
     for key, record in sorted(store.records.items()):
         match = NAME.match(Path(key).name)
         if not match:
@@ -415,10 +699,21 @@ def validate_store(store: Store) -> list[str]:
             problems.append(f"{key}: commit {git['commit']} not in repository")
         if git["dirty"] and key not in store.superseded:
             problems.append(f"{key}: dirty working tree but not listed in SUPERSEDED.json")
-        if key not in store.superseded and record["experiment"] in {"attention_backends", "kv_cache_scaling", "training_step"}:
-            check_benchmark(key, record, problems)
+        if record["experiment"] in {"attention_backends", "kv_cache_scaling", "training_step"}:
+            if key not in store.superseded:
+                check_benchmark(key, record, problems)
+            elif record["experiment"] == "kv_cache_scaling":
+                check_benchmark(key, record, problems, legacy=True)
+        if record["experiment"] == "legacy_kv_cache_benchmark":
+            check_legacy_kv(key, record, problems)
     select_training(store, problems)
-    attested_identities(store, problems)
+    evidence = identity_evidence(store, problems)
+    check_attestations(store, problems)
+    for (key, kind), found in sorted(evidence.items()):
+        if require_artifacts and found.status != ARTIFACT_VERIFIED:
+            problems.append(f"{key}: {kind} checkpoint identity is {found.status}; artifact verification required")
+        elif strict and found.status not in VERIFIED:
+            problems.append(f"{key}: {kind} checkpoint identity is {found.status}; strict verification needs the artifact or the pinned audited baseline")
     index = training_by_checkpoint(store)
     for key, record in store.current("evaluation"):
         check_evaluation(store, key, record, problems, index)
@@ -435,13 +730,13 @@ def validate_store(store: Store) -> list[str]:
     return problems
 
 
-def protocol_rows(store: Store, protocol: str, evaluation_names: list[str]) -> list[dict]:
+def protocol_rows(store: Store, protocol: str, evaluation_names: list[str], strict: bool = True) -> list[dict]:
     """Training identities of a protocol joined to named evaluations by checkpoint identity.
 
     Fails closed: raises RecordError on any validation problem, on an evaluation
     row that does not resolve, or on a training identity missing from an evaluation.
     """
-    problems = validate_store(store)
+    problems = validate_store(store, strict=strict)
     if problems:
         raise RecordError("records failed validation:\n" + "\n".join(problems))
     selected = {identity: record for identity, record in select_training(store, []).items() if identity.protocol == protocol}

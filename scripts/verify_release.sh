@@ -7,7 +7,9 @@ PY=${PYTHON:-python}
 step() { echo "== $*"; }
 step "lint";                "$PY" -m ruff check .
 step "tests";               "$PY" -m pytest -q
-step "record validation";   "$PY" scripts/validate_records.py | tail -n 1
+# --strict: model identities must be verified from checkpoint artifacts or the pinned
+# audited baseline; metadata-only consistency fails the release.
+step "record validation";   "$PY" scripts/validate_records.py --strict | tail -n 2
 step "report regeneration"; "$PY" scripts/build_experiment_report.py
 step "documentation drift"; git diff --exit-code -- docs/EXPERIMENT_RESULTS.md docs/figures
 echo "release verification passed"
