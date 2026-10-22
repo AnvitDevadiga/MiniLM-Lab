@@ -1,7 +1,8 @@
 """Numerical and output-quality comparison of attention backends on trained weights.
 
 For each checkpoint, device/dtype and backend:
-  * logit error against a float64 CPU oracle (reference backend)
+  * logit error against a float64 CPU oracle (reference backend; RMSNorm variance
+    and RoPE angles are still computed in float32)
   * next-token top-1 agreement with the oracle
   * held-out loss / perplexity over every validation target (fp32 loss)
   * greedy cached generation agreement with the oracle's tokens
@@ -121,7 +122,7 @@ def main() -> None:
             "validation_text": str(args.validation_text.resolve().relative_to(ROOT)) if args.validation_text.resolve().is_relative_to(ROOT) else str(args.validation_text),
             "validation_sha256": file_sha256(args.validation_text),
             "validation_targets": tokens.numel() - 1,
-            "oracle": "cpu float64, reference backend",
+            "oracle": "cpu float64, reference backend (RMSNorm variance and RoPE angles computed in float32)",
             "loss_precision": "logits upcast to float32 before cross-entropy",
             "greedy": {"prompts": args.prompts, "prompt_tokens": 32, "generated_tokens": args.generate_tokens, "cached": True},
             "skipped_targets": skipped,

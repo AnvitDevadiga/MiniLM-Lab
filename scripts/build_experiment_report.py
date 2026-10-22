@@ -123,7 +123,8 @@ def quality_table(record: dict) -> str:
     settings = record["settings"]
     lines = [
         (
-            f"Oracle: {settings['oracle']}; {settings['validation_targets']:,} held-out targets; "
+            f"Oracle: {settings['oracle']} (RMSNorm variance and RoPE angles still run in float32); "
+            f"{settings['validation_targets']:,} held-out targets; "
             f"greedy: {settings['greedy']['prompts']} prompts × {settings['greedy']['generated_tokens']} tokens."
         ),
         "",
