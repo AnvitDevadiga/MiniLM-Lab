@@ -36,28 +36,43 @@ The same weights were run through three attention implementations: the default `
 
 ![SDPA speedup](docs/figures/attention_speedup.svg)
 
-Measured on one M4 MacBook (CPU and MPS). CUDA is untested. [Full tables, method and limitations](docs/EXPERIMENT_RESULTS.md) · [audit with evidence per claim](docs/implementation_audit.md) · [raw records](experiments/records/).
+Trained with each backend on three seeds, the models are indistinguishable in quality, and SDPA training steps are 8–28% faster on CPU. SDPA is now a selectable training backend (`--attention-backend sdpa`). The evidence supports making it the default, but the default stays `auto` so the published commands keep reproducing bit-for-bit.
+
+The KV cache is 2.2–23× faster than recomputation on CPU. On MPS it is *slower* for single short prompts, and once generation passes the context window it gives no benefit at all.
+
+![KV cache speedup](docs/figures/kv_cache_speedup.svg)
+
+### Corpus protocol v2: cleaned text and an untouched test book
+
+`data/science-v2/` removes non-prose text (Darwin's index, front matter, glossaries, tables) with documented rules before splitting. It adds Faraday's *The Chemical History of a Candle* as a test book that is never used for training or checkpoint selection. Automated checks find no exact or near-duplicate passages across splits. Over three seeds, test perplexity is **15.66 ± 2.58** (default attention) and **15.60 ± 2.63** (SDPA). These numbers use different data and must not be compared with the v1 perplexities above. The original v1 corpus and results are preserved unchanged.
+
+Measured on one M4 MacBook (CPU and MPS). CUDA is untested. [Full tables, method and limitations](docs/EXPERIMENT_RESULTS.md) · [research report](docs/research_report.md) · [audit with evidence per claim](docs/implementation_audit.md) · [raw records](experiments/records/).
 
 ## Reproduce on a MacBook Air
 
-You need Python 3.12 and the ability to install PyTorch. The commands below run the checks, prepare the pinned corpus, train the small model, and score the held-out text. Training time varies by device.
+You need Python 3.12 and the ability to install PyTorch. The commands below run the checks, train the published v1 model on the committed corpus, and score the held-out text. Training time varies by device; on an M4 CPU it takes about two minutes.
 
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e '.[dev]'
 make check
-python scripts/prepare_science_corpus.py
 python scripts/train_tiny.py data/science/train.txt \
   --validation-text data/science/validation.txt \
   --steps 1000 --eval-interval 250 --gradient-accumulation-steps 4 \
-  --output-dir artifacts/runs/science-v2
+  --device cpu --seed 42 --output-dir artifacts/runs/science-v1-s42
 python scripts/evaluate.py data/science/train.txt \
   --validation-text data/science/validation.txt \
-  --checkpoint artifacts/runs/science-v2/best_checkpoint.pt
+  --checkpoint artifacts/runs/science-v1-s42/best_checkpoint.pt
 ```
 
-Training chooses Apple MPS when available and otherwise runs on CPU. The published run used CPU because MPS was unavailable in its execution environment. Use `--device cpu` to match that hardware path. The corpus preparation script downloads the two source texts and records SHA-256 hashes. Source files can change upstream, so check the hashes before comparing a new run to the published one.
+On CPU with torch 2.14 this reproduces the published v1 run bit-for-bit (held-out perplexity 17.58). Training otherwise chooses Apple MPS when available. The v1 corpus files are committed. `scripts/prepare_science_corpus.py` now refuses to run because Project Gutenberg changed the Darwin file's header, so its raw hash no longer matches. The extracted v1 split is unaffected and still regenerates byte-for-byte; see the [audit](docs/implementation_audit.md).
+
+To rebuild and verify the v2 corpus, then train, select and test under protocol v2 (3 seeds × 2 attention backends):
+
+```bash
+PYTHON=python ./experiments/v2_protocol.sh
+```
 
 ## System
 
@@ -91,8 +106,8 @@ The research paper is generated from the tracked results and benchmark protocol 
 
 ## Scope and limitations
 
-- Quality numbers come from 1,000 optimizer steps. Every seed spends most of that time near unigram-level loss, so the model is under-trained and seed-sensitive.
-- 26% of held-out bytes are the alphabetical index of *On the Origin of Species*. The validation split also selects the best checkpoint; there is no untouched test split.
+- Quality numbers come from 1,000 optimizer steps. Every seed, on both corpora, spends most of that time on an early loss plateau, so the models are under-trained and seed-sensitive.
+- In the legacy v1 corpus, 26% of held-out bytes are the alphabetical index of *On the Origin of Species*, and the validation split both selects checkpoints and is reported. Protocol v2 fixes both, but its numbers are not comparable with v1.
 - Timings come from one laptop and one session per record. MPS conclusions apply to this tiny model, where kernel-launch overhead dominates, and may not hold at larger scale.
 - The PDF paper and the first README figures predate the October 2026 study and are not regenerated from it.
 

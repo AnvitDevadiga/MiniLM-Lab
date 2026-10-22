@@ -34,9 +34,9 @@ or record that verifies it. Baseline before any change: 16/16 tests passed, ruff
 
 | Finding | Consequence |
 | --- | --- |
-| Default attention (`nn.MultiheadAttention` with an explicit boolean mask) is used by training, evaluation and uncached generation | On CPU at B=8, L=2048 it is 4.5× slower and uses 8× more memory than SDPA with `is_causal` (see EXPERIMENT_RESULTS.md). Switching the default changes training numerics slightly, so it should be its own experiment |
-| 26% of all validation bytes (31.5% of Darwin's) are the book's alphabetical index | Held-out perplexity mixes prose with index entries; per-source numbers are affected most |
-| The validation split both selects the best checkpoint and is reported | No untouched test split. The best checkpoint was the final step in all three seeds, so selection bias is currently nil, but the protocol allows it |
+| Default attention (`nn.MultiheadAttention` with an explicit boolean mask) is used by training, evaluation and uncached generation | On CPU at B=8, L=2048 it is 4.5× slower and uses 8× more memory than SDPA with `is_causal` (see EXPERIMENT_RESULTS.md). Switching the default changes training numerics slightly, so it should be its own experiment **Update:** SDPA is now a selectable training backend; matched experiments in EXPERIMENT_RESULTS.md (Experiment 04, Part B) support making it the default, which is left as an explicit decision |
+| 26% of all validation bytes (31.5% of Darwin's) are the book's alphabetical index | Held-out perplexity mixes prose with index entries; per-source numbers are affected most **Update:** unchanged in legacy science-v1; removed in science-v2 |
+| The validation split both selects the best checkpoint and is reported | No untouched test split. The best checkpoint was the final step in all three seeds, so selection bias is currently nil, but the protocol allows it **Update:** science-v2 adds an untouched test book (Faraday), evaluated once per selected checkpoint |
 | Training plateaus near unigram entropy (≈3.27 nats) until ~750 of 1,000 steps in every seed | The published checkpoint is captured as it leaves the plateau. Seeds 42/43/44 give perplexity 17.58 / 18.99 / 21.07, so the single-seed headline is optimistic |
 | Evaluation uses non-overlapping 128-token chunks | Early tokens in each chunk see little context. Perplexity is pessimistic relative to sliding-window evaluation (correctly counted, but not comparable to sliding-window numbers) |
 | Resumed runs log an extra evaluation at each segment boundary | Weights are identical; `metrics` gains a row, and `best_checkpoint.pt` could be chosen at a step an uninterrupted run never evaluates |
@@ -50,6 +50,22 @@ or record that verifies it. Baseline before any change: 16/16 tests passed, ruff
 - The BPE tokenizer path through training/evaluation, LoRA integration into the model, and the published INT8 numbers were not re-measured in this pass.
 - CUDA code paths (`synchronize`, `max_memory_allocated`) are untested: no CUDA hardware.
 - Benchmark timings assume a quiet machine. Thermal state and background load were not controlled beyond warmups, rotated backend order and repeat statistics.
+
+## Addendum · SDPA training and corpus v2 (October 2026)
+
+| Finding | Evidence | Resolution |
+| --- | --- | --- |
+| `reference_causal_attention` downcast float64 scores to float32 (`.float()`) | `torch.autograd.gradcheck` failed for the reference backend only | Promote to at least float32, never below the input dtype; float64 reference now equals SDPA to 1e-12. The quality record that used the float64 "oracle" is superseded; re-running with the corrected oracle changed fp32 logit errors by < 1e-6 (e.g. 3.65e-5 → 3.60e-5) and no conclusion |
+| SDPA and reference paths skipped attention dropout in training | code inspection | Apply `nn.MultiheadAttention`'s dropout probability in training mode; inert at the published `dropout=0` |
+| Upstream Darwin file changed (`ededa9c0…` → `362142cb…`) | fresh download | The extracted v1 split regenerates byte-identically from the new file; only the Gutenberg header/licence changed. `prepare_science_corpus.py` (v1) still pins the old raw hash and therefore refuses to run; it is left unchanged as a legacy script. v2 pins the hash of the extracted body instead |
+| One training record was written while unrelated documentation edits were uncommitted | record `git.dirty = true` | Re-recorded from a clean tree; the dirty record is kept and marked superseded |
+
+Verified after the changes:
+
+- Default-backend (`auto`) training on v1 is bitwise identical to the original runs for seeds 42, 43 and 44.
+- Per-backend gradients agree with a float64 oracle to a relative 1e-4 for learned and RoPE models; `gradcheck` passes for the attention layer under every backend.
+- Training resumes refuse a backend change; checkpoints record the backend.
+- v2 corpus: body hashes verified on a fresh download; zero exact and near duplicates across train/validation/test; legacy v1 files still match their original manifest (all enforced by `tests/test_corpus_data.py`).
 
 # Implementation audit · September 2026
 

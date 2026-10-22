@@ -426,6 +426,25 @@ def v2_corpus_table(manifest: dict) -> str:
     return "\n".join(lines)
 
 
+def training_step_table(records: dict[str, dict]) -> str:
+    lines = []
+    for key, record in records.items():
+        s = record["settings"]
+        lines += [
+            f"**{key}** · batch {s['batch_size']} · forward + backward + AdamW · {s['repeats']} repeats after {s['warmup']} warmups · median (p95)",
+            "",
+            "| L | Backend | Step ms | Tokens/s | First-step extra memory MiB | max abs loss difference vs default |",
+            "| ---: | --- | ---: | ---: | ---: | ---: |",
+        ]
+        for row in record["results"]:
+            lines.append(
+                f"| {row['seq_len']} | {BACKEND_LABEL[row['backend']]} | {row['step_ms']['median']:.1f} ({row['step_ms']['p95']:.1f}) "
+                f"| {row['tokens_per_second']['median']:.0f} | {row['memory']['peak_extra_bytes'] / 2**20:.1f} | {row['max_abs_loss_difference_vs_first_backend']:.1e} |"
+            )
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
 def kv_figure(records: dict[str, dict]) -> tuple[str, str]:
     panels = []
     for key, record in records.items():
@@ -477,6 +496,9 @@ def main() -> None:
         extra_figures.append(kv_figure(kv))
     training = latest_by_name(RECORDS / "training") if (RECORDS / "training").exists() else {}
     evaluations = latest_by_name(RECORDS / "evaluation") if (RECORDS / "evaluation").exists() else {}
+    step_records = latest(RECORDS / "training_step") if (RECORDS / "training_step").exists() else {}
+    if step_records:
+        sections["training_step"] = training_step_table(step_records)
     v1_rows = training_rows(training, evaluations, "science-v1", ["sdpa_v1_eval_cpu", "sdpa_v1_eval_mps"])
     if v1_rows:
         sections["sdpa_training"] = sdpa_training_table(v1_rows)

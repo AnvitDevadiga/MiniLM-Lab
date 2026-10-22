@@ -5,99 +5,148 @@ from JSON records in `experiments/records/`. Sections between
 `BEGIN GENERATED` / `END GENERATED` markers are overwritten on rebuild; prose
 outside them is hand-written and cites those tables.
 
+## Protocols and comparability
+
+| Protocol | Corpus | Splits | Used in |
+| --- | --- | --- | --- |
+| **science-v1** (legacy, unchanged) | `data/science/`: Darwin + Einstein, Gutenberg boilerplate removed, nothing else | train / validation (validation also selects checkpoints and is reported) | Part A, published September 2026 results |
+| **science-v2** | `data/science-v2/`: same two books with front/back matter and non-prose removed by deterministic rules; Faraday as an untouched test book | train / validation (selection) / test (final evaluation only) | Part B |
+
+**Perplexities are never compared across protocols.** v2 removes the Darwin index
+and other non-prose text and uses a different validation set, so a lower v2 number
+is not an improvement over v1. Timing experiments (02, 03 and the training-step
+benchmark) use random weights and synthetic tokens and do not depend on either corpus.
+
+Hardware for every record: one Apple M4 MacBook (16 GB), CPU with 4 torch threads
+and MPS; Python 3.12.14, torch 2.14.1. No CUDA hardware was available; CUDA code
+paths are untested.
+
 ## Summary
 
-Hardware: one Apple M4 MacBook (16 GB), CPU (4 torch threads) and MPS. No CUDA
-hardware was available; CUDA code paths are untested.
+### Part A · systems experiments and science-v1
 
-1. **All three attention implementations compute the same function.** On trained
-   checkpoints in float32, the default MHA path, SDPA and the explicit reference give
-   identical held-out perplexity to four decimals, 100% top-1 agreement with a
-   float64 oracle, and identical greedy continuations, on CPU and MPS, for all three seeds.
-2. **SDPA is faster at every measured shape, and the gap grows with sequence length.**
-   Forward pass reference/SDPA: 1.2–1.3× at L=128 on CPU, rising to 3.4–3.9× at L=2048.
-   On MPS it is 2.0–3.1× at L=128 and 3.9–5.4× at L=2048.
-3. **SDPA avoids the L² score matrix.** At B=8, L=2048 the extra memory per forward
-   pass is 223 vs 1,765 MiB on CPU fp32, 180 vs 1,608 MiB on MPS fp32 and 90 vs
-   1,950 MiB on MPS fp16. The reference does its softmax in fp32, so fp16 does not
-   shrink its score matrix.
-4. **The repository's default path is the slow one on CPU.** `nn.MultiheadAttention`
-   with an explicit boolean mask, used by training, evaluation and uncached
-   generation, is close to the reference in time and memory on CPU (1,439 ms and 1,835 MiB
-   at B=8, L=2048 vs 321 ms and 223 MiB for SDPA; 1.2–4.5× slower than SDPA across the grid).
-   On MPS it is 1.1–1.6× slower than SDPA with similar memory (0.9–1.2×).
-5. **For this model, MPS does not beat the CPU at batch-1 decode.** Per-token decode is
-   0.36 ms on CPU vs 1.64 ms on MPS at L=128, and MPS stays at a ~1.6–2.1 ms floor regardless
-   of context length. This is consistent with per-kernel launch overhead dominating a
-   4-layer, 192-wide model, but no profiler was run, so the cause is an inference.
-   Fused SDPA matters more for MPS decode than for prefill: the reference's extra
-   small ops raise the floor to ~4.1–4.7 ms.
-6. **Reduced precision, not the attention backend, drives output differences.**
-   fp16 keeps 99.8% top-1 agreement but changes 0–2 of 8 greedy continuations;
-   bf16 drops to ~98.5% and changes 2–5 of 8. Perplexity moves by < 0.005 in both.
-7. **The published 17.58 perplexity is the best of three seeds.** Seeds 42/43/44
-   give 17.58 / 18.99 / 21.07 (mean 19.21 ± 1.75). Every seed sits at ≈3.27 nats
-   (near unigram entropy) until ~750 of 1,000 steps. The spread reflects *when* each
-   run leaves that plateau.
+1. **The three attention implementations compute the same function.** In float32,
+   default MHA, SDPA and the explicit reference give identical held-out perplexity to
+   four decimals, 100% top-1 agreement with a float64 oracle and identical greedy text,
+   on CPU and MPS, for three trained seeds. Gradients agree with a float64 oracle and
+   pass `gradcheck` under every backend.
+2. **Inference: SDPA is faster at every shape and the gap grows with length**
+   (reference/SDPA forward 1.2–1.3× at L=128 → 3.4–3.9× at L=2048 on CPU; 2.0–3.1× →
+   3.9–5.4× on MPS) **and avoids the L² score matrix** (B=8, L=2048: 223 vs 1,765 MiB on
+   CPU fp32, 180 vs 1,608 MiB on MPS fp32, 90 vs 1,950 MiB on MPS fp16).
+3. **The default MHA path is close to the reference on CPU at inference** (1,439 ms vs
+   321 ms for SDPA at B=8, L=2048) and 1.1–1.6× slower than SDPA on MPS.
+4. **KV cache.** On CPU the cache is faster at every measured shape: 2.2–16× over
+   uncached SDPA at batch 1 and 3.8–23× at batch 8 (up to 62× over the uncached default
+   path). On MPS at batch 1 with prompts of 1–16 tokens it is *slower* (0.87–0.88×);
+   it pays off from 128 tokens (1.1×) and reaches 3.4× at 1,024. Past the context
+   window every step rebuilds the cache, so caching gives ~1.0× on MPS. Cached and
+   uncached greedy tokens are identical in every fp32 configuration; in fp16 they
+   differ in 2 of 11 configurations (near-tie argmax flips with random weights).
+   Cache memory grows by exactly 6,144 bytes per position per sequence (fp32), and
+   each concatenating decode step transiently allocates about one full cache copy.
+5. **Training with SDPA vs the default path (science-v1, 3 seeds).** Validation
+   perplexity is indistinguishable: 19.21 ± 1.75 (default) vs 19.04 ± 1.37 (SDPA);
+   paired differences +0.10, +0.02, −0.65. Both backends agree to seven decimals
+   while the model sits on its early plateau and diverge only when it leaves it.
+   In the controlled step benchmark, SDPA steps are 8% (L=128) to 28% (L=1,024)
+   faster than the default on CPU with similar memory; on MPS all three backends are
+   within ~5% in time and memory. CPU evaluation of the full validation split takes
+   ~16% less time with SDPA (1.55 vs 1.85 s mean). Full-run tokens/s were confounded by
+   run order (the first run of the session was the fastest) and are not used for claims.
+6. **The published 17.58 perplexity is the best of three seeds** (17.58 / 18.99 / 21.07).
+
+### Part B · science-v2
+
+7. **Cleaned corpus with an untouched test book.** Darwin's index, both books' front
+   matter, Einstein's symbol glossary, Faraday's notes, headings, bracketed editorial
+   paragraphs and numeric tables are removed by documented rules before splitting.
+   Zero exact and zero near duplicates (≥ 50% shared word 8-grams) across
+   train/validation/test.
+8. **Test perplexity (Faraday, never used for training or selection):
+   15.66 ± 2.58 (default) and 15.60 ± 2.63 (SDPA)**, 0.1–0.4 above validation in all
+   six runs. Seeds dominate the spread (13.8–18.6); the backend does not
+   (paired test differences −0.10, 0.00, −0.08).
+
+### Decision on SDPA
+
+Correctness (forward, gradients, causality, cache equivalence) and performance are
+verified. SDPA matches the default's quality on two corpora, trains as fast or faster,
+evaluates faster, and is much faster with far less memory at long-sequence inference.
+**Recommendation: make SDPA the default for new experiments.** It is *not* switched in
+this branch, because changing the default would silently change what the published
+v1 commands run; doing so should come with `--attention-backend auto` added to every
+v1 reproduction command. The default (`auto`) path remains available and is bitwise
+reproducible.
 
 ## Method
 
-- **Matched comparisons.** Each timing record uses one model object with seeded random
-  weights and the published architecture (vocab 256, width 192, 4 layers, 6 heads).
-  Only the position table grows, to L + 32 tokens, so long sequences fit.
-  `set_attention_backend` switches the attention math without touching weights.
-  Inputs are seeded per (B, L). Precision and device are fixed per record.
-- **Timing.** 3 warmup + 10 measured trials per (backend, B, L). Backend order rotates
-  each repeat. The device is synchronized before and after every timed region,
-  and each of the 32 decode steps is timed separately. `torch.inference_mode()`.
-  Medians, p95, IQR and CV are computed from the raw samples kept in each record.
-- **Phases.** *forward* = `model(x)`, the path used by training, evaluation and
-  uncached generation. *prefill* = `forward_cached(prompt)`. *decode* = greedy
-  single-token steps against the cache. *generation tok/s* = B × 32 / (prefill + decode).
-  The `auto` backend uses SDPA inside `forward_cached`, so it has no separate decode row.
-- **Memory.** One fresh process per point. CPU: peak-RSS delta around a single forward pass.
-  Small deltas can hide under the model-construction peak. MPS: live allocator bytes
-  sampled after every aten op. The first MPS records used driver pool size, which moves
-  in ~1 GiB heaps; they are kept in `experiments/records/attention/` but superseded.
-- **Quality.** Trained checkpoints (seeds 42–44). Oracle = reference backend in float64 on CPU.
-  Perplexity covers all 112,111 held-out targets with the repository's chunking, and the loss
-  is computed in fp32 from each target's logits. Greedy agreement uses 8 validation prompts
-  (32 tokens) × 64 generated tokens, cached.
+- **Matched comparisons.** Each timing record uses one set of seeded weights with the
+  published architecture (vocab 256, width 192, 4 layers, 6 heads); only the position
+  table grows to fit long sequences. `set_attention_backend` switches attention math
+  without touching weights. Inputs are seeded; dtype and device are fixed per record.
+- **Timing.** Warmups, then repeated trials with backend/mode order rotated each
+  repeat; devices are synchronized around every timed region; decode steps are timed
+  individually. Medians, p95, IQR and CV come from raw samples stored in each record.
+- **Memory.** One fresh process per point. CPU: peak-RSS delta. MPS: live allocator
+  bytes sampled after every aten op (forward and backward). Earlier MPS records using
+  driver pool size (~1 GiB granularity) are kept but superseded.
+- **Quality.** Oracle = reference backend in float64 on CPU (the softmax runs in
+  float64 since the fix described in the audit). Perplexity uses the repository's
+  non-overlapping 128-token chunking, with loss computed in fp32.
+- **Training comparison.** Identical command, data, seeds and hardware (CPU, fp32);
+  only `--attention-backend` differs; backend order alternates per seed. Default-path
+  checkpoints are bitwise identical to the original v1 runs.
+- **v2 protocol.** Hyperparameters are the v1 values (nothing tuned on v2). The best
+  checkpoint per run is chosen on validation loss; the test book is scored once per
+  selected checkpoint after all training (`experiments/v2_protocol.sh`).
 
 ## Limitations
 
-- Single machine, single session per record. Timings were not repeated across reboots
-  or thermal states. CPU p95s show occasional 1.5–2.3× outliers (see variability table).
-- Latency uses random weights. It does not depend on weight values, but the quality
-  comparison is limited to the 128-token trained context.
-- The model is tiny. Kernel-launch overhead dominates on MPS, so conclusions about
-  MPS vs CPU should not be extrapolated to larger models.
-- MPS memory is a per-op sample of live allocations, not a kernel-internal peak.
-  CPU memory is RSS, which includes allocator caching.
-- Three seeds is the minimum for a spread estimate, not a confidence interval.
-- No CUDA, no `torch.compile`, no FlashAttention-specific kernels.
+- One laptop, one session per record; no repeat across reboots or thermal states.
+- All models are trained for 1,000 steps and leave a near-unigram plateau only around
+  step 750–1,000, so they are under-trained and seed-sensitive. Three seeds give a
+  spread estimate, not a confidence interval.
+- Latency uses random weights; quality comparisons are limited to the 128-token
+  trained context.
+- MPS conclusions are for a tiny model where launch overhead dominates.
+- The v2 test book is a single 1861 popular-science lecture series; it measures
+  transfer to one new author and topic, not general language ability.
+- No CUDA, `torch.compile` or FlashAttention-specific kernels.
 
 ## Reproduce
 
 ```bash
+# Inference and cache benchmarks (corpus-independent)
 python scripts/benchmark_attention.py --device cpu --dtype float32
 python scripts/benchmark_attention.py --device mps --dtype float32
 python scripts/benchmark_attention.py --device mps --dtype float16
-for s in 42 43 44; do python scripts/train_tiny.py data/science/train.txt \
-  --validation-text data/science/validation.txt --steps 1000 --eval-interval 250 \
-  --gradient-accumulation-steps 4 --device cpu --seed $s --output-dir artifacts/runs/science-v2-s$s; done
-python scripts/compare_attention_quality.py artifacts/runs/science-v2-s4{2,3,4}/best_checkpoint.pt
+python scripts/benchmark_kv_scaling.py --device cpu
+python scripts/benchmark_kv_scaling.py --device mps
+python scripts/benchmark_kv_scaling.py --device mps --dtype float16
+python scripts/benchmark_training_step.py --device cpu
+python scripts/benchmark_training_step.py --device mps
+
+# science-v1: matched default vs SDPA training, then inference quality per backend
+PYTHON=python ./experiments/sdpa_v1.sh
+python scripts/compare_attention_quality.py artifacts/runs/sdpa-v1/auto-s4{2,3,4}/best_checkpoint.pt
+
+# science-v2: rebuild corpus (verified against committed files), train, select, test once
+PYTHON=python ./experiments/v2_protocol.sh
+
 python scripts/build_experiment_report.py
 ```
 
-Each script writes a new timestamped record; nothing is overwritten. The report uses the
-latest record per device/dtype.
+Each script writes a new timestamped record and never overwrites an existing one. The
+report uses the latest record per name or device/dtype; superseded records stay on disk.
 
 ![SDPA speedup](figures/attention_speedup.svg)
 
 ![Attention memory](figures/attention_memory.svg)
 
 ![Decode latency](figures/attention_decode.svg)
+
+![KV cache speedup](figures/kv_cache_speedup.svg)
 
 ## Environment
 
@@ -107,11 +156,13 @@ latest record per device/dtype.
 | `20261022T033005Z_attention_cpu_float32_615767d.json` | cpu | float32 | Apple M4 | 2.14.1 | 3.12.14 | 4 | `615767d` | False |
 | `20261022T034036Z_attention_mps_float32_0502118.json` | mps | float32 | Apple M4 | 2.14.1 | 3.12.14 | 4 | `0502118` | False |
 | `20261022T034304Z_attention_mps_float16_0502118.json` | mps | float16 | Apple M4 | 2.14.1 | 3.12.14 | 4 | `0502118` | False |
-| `20261022T034349Z_attention_quality_0502118.json` | cpu,mps | mixed | Apple M4 | 2.14.1 | 3.12.14 | 4 | `0502118` | False |
+| `20261022T041752Z_attention_quality_48e95f8.json` | cpu,mps | mixed | Apple M4 | 2.14.1 | 3.12.14 | 4 | `48e95f8` | False |
 | `20261022T035538Z_kv_cpu_float32_93507c4.json` | cpu | float32 | Apple M4 | 2.14.1 | 3.12.14 | 4 | `93507c4` | False |
 | `20261022T035808Z_kv_mps_float32_93507c4.json` | mps | float32 | Apple M4 | 2.14.1 | 3.12.14 | 4 | `93507c4` | False |
 | `20261022T040019Z_kv_mps_float16_93507c4.json` | mps | float16 | Apple M4 | 2.14.1 | 3.12.14 | 4 | `93507c4` | False |
 <!-- END GENERATED:environment -->
+
+# Part A · Systems experiments and corpus science-v1 (legacy)
 
 ## Experiment 02 · Attention: reference vs PyTorch SDPA
 
@@ -266,36 +317,36 @@ Oracle: cpu float64, reference backend; 112,111 held-out targets; greedy: 8 prom
 
 | Seed | Target | Backend | max abs Δlogit | mean abs Δlogit | top-1 agree | Perplexity | Greedy identical |
 | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| 42 | cpu/float32 | MHA (default) | 3.65e-05 | 1.04e-06 | 100.000% | 17.5827 | 8/8 |
-| 42 | cpu/float32 | SDPA | 3.35e-05 | 1.04e-06 | 100.000% | 17.5827 | 8/8 |
-| 42 | cpu/float32 | Reference | 3.66e-05 | 1.04e-06 | 100.000% | 17.5827 | 8/8 |
-| 42 | mps/float32 | MHA (default) | 3.27e-05 | 1.03e-06 | 100.000% | 17.5827 | 8/8 |
-| 42 | mps/float32 | SDPA | 3.27e-05 | 1.03e-06 | 100.000% | 17.5827 | 8/8 |
-| 42 | mps/float32 | Reference | 4.11e-05 | 1.03e-06 | 100.000% | 17.5827 | 8/8 |
+| 42 | cpu/float32 | MHA (default) | 3.60e-05 | 1.04e-06 | 100.000% | 17.5827 | 8/8 |
+| 42 | cpu/float32 | SDPA | 3.40e-05 | 1.04e-06 | 100.000% | 17.5827 | 8/8 |
+| 42 | cpu/float32 | Reference | 3.71e-05 | 1.04e-06 | 100.000% | 17.5827 | 8/8 |
+| 42 | mps/float32 | MHA (default) | 3.31e-05 | 1.03e-06 | 100.000% | 17.5827 | 8/8 |
+| 42 | mps/float32 | SDPA | 3.31e-05 | 1.03e-06 | 100.000% | 17.5827 | 8/8 |
+| 42 | mps/float32 | Reference | 4.16e-05 | 1.03e-06 | 100.000% | 17.5827 | 8/8 |
 | 42 | mps/float16 | MHA (default) | 7.36e-02 | 2.18e-03 | 99.880% | 17.5826 | 6/8 |
 | 42 | mps/float16 | SDPA | 7.36e-02 | 2.18e-03 | 99.880% | 17.5826 | 6/8 |
 | 42 | mps/float16 | Reference | 8.14e-02 | 2.19e-03 | 99.880% | 17.5825 | 6/8 |
 | 42 | mps/bfloat16 | MHA (default) | 6.00e-01 | 1.75e-02 | 98.786% | 17.5863 | 4/8 |
 | 42 | mps/bfloat16 | SDPA | 6.00e-01 | 1.75e-02 | 98.786% | 17.5863 | 4/8 |
 | 42 | mps/bfloat16 | Reference | 6.00e-01 | 1.75e-02 | 98.755% | 17.5858 | 3/8 |
-| 43 | cpu/float32 | MHA (default) | 1.82e-05 | 7.87e-07 | 100.000% | 18.9894 | 8/8 |
-| 43 | cpu/float32 | SDPA | 1.70e-05 | 7.87e-07 | 100.000% | 18.9894 | 8/8 |
-| 43 | cpu/float32 | Reference | 2.01e-05 | 7.88e-07 | 100.000% | 18.9894 | 8/8 |
-| 43 | mps/float32 | MHA (default) | 1.60e-05 | 7.81e-07 | 100.000% | 18.9894 | 8/8 |
-| 43 | mps/float32 | SDPA | 1.60e-05 | 7.81e-07 | 100.000% | 18.9894 | 8/8 |
-| 43 | mps/float32 | Reference | 1.79e-05 | 7.80e-07 | 100.000% | 18.9894 | 8/8 |
+| 43 | cpu/float32 | MHA (default) | 1.82e-05 | 7.85e-07 | 100.000% | 18.9894 | 8/8 |
+| 43 | cpu/float32 | SDPA | 1.70e-05 | 7.86e-07 | 100.000% | 18.9894 | 8/8 |
+| 43 | cpu/float32 | Reference | 2.00e-05 | 7.87e-07 | 100.000% | 18.9894 | 8/8 |
+| 43 | mps/float32 | MHA (default) | 1.60e-05 | 7.80e-07 | 100.000% | 18.9894 | 8/8 |
+| 43 | mps/float32 | SDPA | 1.60e-05 | 7.80e-07 | 100.000% | 18.9894 | 8/8 |
+| 43 | mps/float32 | Reference | 1.84e-05 | 7.80e-07 | 100.000% | 18.9894 | 8/8 |
 | 43 | mps/float16 | MHA (default) | 4.85e-02 | 1.78e-03 | 99.851% | 18.9889 | 6/8 |
 | 43 | mps/float16 | SDPA | 4.85e-02 | 1.78e-03 | 99.851% | 18.9889 | 6/8 |
 | 43 | mps/float16 | Reference | 4.85e-02 | 1.78e-03 | 99.855% | 18.9888 | 6/8 |
 | 43 | mps/bfloat16 | MHA (default) | 4.58e-01 | 1.43e-02 | 98.708% | 18.9908 | 3/8 |
 | 43 | mps/bfloat16 | SDPA | 4.58e-01 | 1.43e-02 | 98.708% | 18.9908 | 3/8 |
 | 43 | mps/bfloat16 | Reference | 4.29e-01 | 1.43e-02 | 98.701% | 18.9894 | 4/8 |
-| 44 | cpu/float32 | MHA (default) | 1.13e-05 | 7.67e-07 | 100.000% | 21.0677 | 8/8 |
-| 44 | cpu/float32 | SDPA | 9.27e-06 | 7.68e-07 | 100.000% | 21.0677 | 8/8 |
-| 44 | cpu/float32 | Reference | 9.20e-06 | 7.67e-07 | 100.000% | 21.0677 | 8/8 |
-| 44 | mps/float32 | MHA (default) | 1.10e-05 | 7.68e-07 | 100.000% | 21.0677 | 8/8 |
-| 44 | mps/float32 | SDPA | 1.10e-05 | 7.68e-07 | 100.000% | 21.0677 | 8/8 |
-| 44 | mps/float32 | Reference | 1.14e-05 | 7.68e-07 | 100.000% | 21.0677 | 8/8 |
+| 44 | cpu/float32 | MHA (default) | 1.22e-05 | 7.66e-07 | 100.000% | 21.0677 | 8/8 |
+| 44 | cpu/float32 | SDPA | 9.53e-06 | 7.67e-07 | 100.000% | 21.0677 | 8/8 |
+| 44 | cpu/float32 | Reference | 9.77e-06 | 7.67e-07 | 100.000% | 21.0677 | 8/8 |
+| 44 | mps/float32 | MHA (default) | 1.19e-05 | 7.67e-07 | 100.000% | 21.0677 | 8/8 |
+| 44 | mps/float32 | SDPA | 1.19e-05 | 7.67e-07 | 100.000% | 21.0677 | 8/8 |
+| 44 | mps/float32 | Reference | 1.24e-05 | 7.67e-07 | 100.000% | 21.0677 | 8/8 |
 | 44 | mps/float16 | MHA (default) | 3.33e-02 | 1.56e-03 | 99.804% | 21.0675 | 8/8 |
 | 44 | mps/float16 | SDPA | 3.33e-02 | 1.56e-03 | 99.804% | 21.0675 | 8/8 |
 | 44 | mps/float16 | Reference | 3.33e-02 | 1.57e-03 | 99.802% | 21.0674 | 7/8 |
@@ -304,7 +355,7 @@ Oracle: cpu float64, reference backend; 112,111 held-out targets; greedy: 8 prom
 | 44 | mps/bfloat16 | Reference | 2.75e-01 | 1.24e-02 | 98.416% | 21.0718 | 6/8 |
 <!-- END GENERATED:quality -->
 
-## Seed variability of the published configuration
+## Seed variability of the published configuration (science-v1)
 
 <!-- BEGIN GENERATED:seeds -->
 | Seed | Held-out perplexity | Bits per byte |
@@ -391,7 +442,66 @@ Past the window (context 128, prompt 32, 224 tokens): 128 of 224 cached steps re
 
 ## Experiment 04 · Matched training: default attention vs SDPA (science-v1 corpus)
 
+### Controlled training-step benchmark
+
+<!-- BEGIN GENERATED:training_step -->
+**cpu/float32** · batch 8 · forward + backward + AdamW · 10 repeats after 3 warmups · median (p95)
+
+| L | Backend | Step ms | Tokens/s | First-step extra memory MiB | max abs loss difference vs default |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 128 | MHA (default) | 27.8 (28.5) | 36867 | 107.8 | 0.0e+00 |
+| 128 | SDPA | 25.6 (27.1) | 39931 | 105.7 | 4.8e-07 |
+| 128 | Reference | 27.7 (29.2) | 37029 | 119.5 | 4.8e-07 |
+| 256 | MHA (default) | 54.6 (55.8) | 37542 | 211.1 | 0.0e+00 |
+| 256 | SDPA | 51.9 (52.7) | 39476 | 206.9 | 0.0e+00 |
+| 256 | Reference | 60.9 (61.9) | 33613 | 283.7 | 0.0e+00 |
+| 512 | MHA (default) | 132.0 (135.1) | 31034 | 415.0 | 0.0e+00 |
+| 512 | SDPA | 122.0 (134.0) | 33588 | 405.8 | 4.8e-07 |
+| 512 | Reference | 168.2 (170.2) | 24356 | 684.1 | 9.5e-07 |
+| 1024 | MHA (default) | 353.1 (367.3) | 23200 | 800.7 | 0.0e+00 |
+| 1024 | SDPA | 276.1 (288.4) | 29670 | 768.2 | 4.8e-07 |
+| 1024 | Reference | 531.4 (543.8) | 15416 | 1918.8 | 4.8e-07 |
+
+**mps/float32** · batch 8 · forward + backward + AdamW · 10 repeats after 3 warmups · median (p95)
+
+| L | Backend | Step ms | Tokens/s | First-step extra memory MiB | max abs loss difference vs default |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 128 | MHA (default) | 26.6 (27.0) | 38498 | 105.0 | 0.0e+00 |
+| 128 | SDPA | 25.6 (25.9) | 39940 | 98.5 | 4.8e-07 |
+| 128 | Reference | 25.1 (25.4) | 40733 | 98.6 | 4.8e-07 |
+| 256 | MHA (default) | 51.9 (57.9) | 39498 | 232.3 | 0.0e+00 |
+| 256 | SDPA | 49.8 (55.7) | 41119 | 220.8 | 0.0e+00 |
+| 256 | Reference | 50.3 (51.8) | 40717 | 221.1 | 0.0e+00 |
+| 512 | MHA (default) | 117.3 (117.7) | 34915 | 567.1 | 0.0e+00 |
+| 512 | SDPA | 112.3 (115.7) | 36487 | 549.1 | 4.8e-07 |
+| 512 | Reference | 115.3 (124.4) | 35520 | 550.1 | 4.8e-07 |
+| 1024 | MHA (default) | 306.5 (308.2) | 26732 | 1708.3 | 0.0e+00 |
+| 1024 | SDPA | 296.8 (298.8) | 27604 | 1672.3 | 4.8e-07 |
+| 1024 | Reference | 309.9 (311.9) | 26432 | 1676.3 | 0.0e+00 |
+<!-- END GENERATED:training_step -->
+
+### Full training runs (1,000 steps, 3 seeds, CPU)
+
 <!-- BEGIN GENERATED:sdpa_training -->
+| Seed | Backend | Selected step | Val loss | Val perplexity | Train tok/s | Train s | Peak RSS MiB | Eval s (CPU) | Eval s (MPS) |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 42 | MHA (default) | 1000 | 2.8669 | 17.583 | 36842 | 111.2 | 444 | 1.71 | 2.34 |
+| 42 | SDPA | 1000 | 2.8726 | 17.683 | 30232 | 135.5 | 448 | 1.53 | 2.15 |
+| 43 | MHA (default) | 1000 | 2.9439 | 18.989 | 29278 | 139.9 | 449 | 1.93 | 2.12 |
+| 43 | SDPA | 1000 | 2.9449 | 19.009 | 31231 | 131.2 | 445 | 1.57 | 2.11 |
+| 44 | MHA (default) | 1000 | 3.0477 | 21.068 | 28831 | 142.1 | 451 | 1.90 | 2.17 |
+| 44 | SDPA | 1000 | 3.0163 | 20.416 | 31579 | 129.7 | 442 | 1.56 | 2.21 |
+
+| Backend | n | Val perplexity mean ± sd | Train tok/s mean ± sd | Peak RSS MiB mean ± sd | CPU eval s mean ± sd |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| MHA (default) | 3 | 19.213 ± 1.753 | 31650.275 ± 4501.336 | 447.990 ± 3.342 | 1.847 ± 0.118 |
+| SDPA | 3 | 19.036 ± 1.366 | 31013.909 ± 698.998 | 445.031 ± 3.414 | 1.550 ± 0.020 |
+
+| Seed | SDPA − default val perplexity | SDPA / default train tok/s |
+| ---: | ---: | ---: |
+| 42 | +0.101 | 0.821× |
+| 43 | +0.020 | 1.067× |
+| 44 | -0.652 | 1.095× |
 <!-- END GENERATED:sdpa_training -->
 
 # Part B · Corpus protocol science-v2
@@ -402,9 +512,42 @@ Results in this part use a different corpus and preprocessing protocol from Part
 ## Corpus science-v2
 
 <!-- BEGIN GENERATED:v2_corpus -->
+| Source | Role | Body SHA-256 | Main-text paragraphs | Dropped (rule: count) | Kept | Train paragraphs |
+| --- | --- | --- | ---: | --- | ---: | ---: |
+| On the Origin of Species (1859) (Charles Darwin) | train_validation | `9ff49617f2a0…` | 711 | no_lowercase_heading: 15 | 696 | 623 |
+| Relativity: The Special and General Theory (Lawson translation) (Albert Einstein) | train_validation | `384e707c77e5…` | 542 | no_lowercase_heading: 79 | 463 | 404 |
+| The Chemical History of a Candle (Michael Faraday) | test | `5580d9bfa409…` | 217 | bracketed_editorial: 40, no_lowercase_heading: 15, numeric_list_or_table: 2 | 160 | – |
+
+| File | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `train.txt` | 969,506 | `65182db3ac268ec9…` |
+| `validation.txt` | 105,666 | `6457fe8eaf9011ef…` |
+| `test.txt` | 211,849 | `9e98ba26c3517318…` |
+| `darwin-1859-validation.txt` | 87,711 | `dea22adfd1f580ec…` |
+| `einstein-1924-validation.txt` | 17,953 | `c6728bc6890bc714…` |
+
+| Check | Paragraphs | Exact duplicates | Near duplicates (≥50% word 8-grams) | Mean 8-gram overlap |
+| --- | ---: | ---: | ---: | ---: |
+| darwin-1859_validation_vs_train | 73 | 0 | 0 | 0.00624 |
+| einstein-1924_validation_vs_train | 59 | 0 | 0 | 0.00976 |
+| test_vs_train | 160 | 0 | 0 | 0.00002 |
+| test_vs_validation | 160 | 0 | 0 | 0.00002 |
 <!-- END GENERATED:v2_corpus -->
 
 ## Results under science-v2
 
 <!-- BEGIN GENERATED:v2_results -->
+| Seed | Backend | Selected step (on validation) | Val perplexity | Val bits/byte | **Test perplexity** | **Test bits/byte** | Darwin val ppl | Einstein val ppl |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 42 | MHA (default) | 1000 | 14.241 | 3.8319 | **14.472** | **3.8552** | 13.903 | 16.015 |
+| 42 | SDPA | 1000 | 14.140 | 3.8217 | **14.372** | **3.8451** | 13.802 | 15.908 |
+| 43 | MHA (default) | 1000 | 18.497 | 4.2092 | **18.623** | **4.2190** | 18.009 | 21.065 |
+| 43 | SDPA | 1000 | 18.497 | 4.2092 | **18.623** | **4.2190** | 18.009 | 21.065 |
+| 44 | MHA (default) | 1000 | 13.501 | 3.7550 | **13.886** | **3.7955** | 13.151 | 15.316 |
+| 44 | SDPA | 1000 | 13.482 | 3.7530 | **13.802** | **3.7868** | 13.134 | 15.286 |
+
+| Backend | n | Val perplexity mean ± sd | Test perplexity mean ± sd |
+| --- | ---: | ---: | ---: |
+| MHA (default) | 3 | 15.413 ± 2.697 | 15.660 ± 2.583 |
+| SDPA | 3 | 15.373 ± 2.726 | 15.599 ± 2.634 |
 <!-- END GENERATED:v2_results -->
