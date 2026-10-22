@@ -42,10 +42,10 @@ def main() -> None:
             "training_code_commit": args.code_commit,
             "note": args.note,
             "data": {
-                "train": {"path": str(args.train_text.relative_to(ROOT)), "sha256": file_sha256(args.train_text)},
-                "validation": {"path": str(args.validation_text.relative_to(ROOT)), "sha256": file_sha256(args.validation_text)},
+                "train": {"path": str(args.train_text.resolve().relative_to(ROOT)), "sha256": file_sha256(args.train_text)},
+                "validation": {"path": str(args.validation_text.resolve().relative_to(ROOT)), "sha256": file_sha256(args.validation_text)},
                 "corpus_sha256_in_checkpoint": final["corpus_sha256"],
-                "manifest_path": str(args.manifest.relative_to(ROOT)),
+                "manifest_path": str(args.manifest.resolve().relative_to(ROOT)),
                 "manifest_sha256": file_sha256(args.manifest),
             },
         },

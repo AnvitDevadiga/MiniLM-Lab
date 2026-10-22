@@ -108,6 +108,9 @@ latest record per device/dtype.
 | `20261022T034036Z_attention_mps_float32_0502118.json` | mps | float32 | Apple M4 | 2.14.1 | 3.12.14 | 4 | `0502118` | False |
 | `20261022T034304Z_attention_mps_float16_0502118.json` | mps | float16 | Apple M4 | 2.14.1 | 3.12.14 | 4 | `0502118` | False |
 | `20261022T034349Z_attention_quality_0502118.json` | cpu,mps | mixed | Apple M4 | 2.14.1 | 3.12.14 | 4 | `0502118` | False |
+| `20261022T035538Z_kv_cpu_float32_93507c4.json` | cpu | float32 | Apple M4 | 2.14.1 | 3.12.14 | 4 | `93507c4` | False |
+| `20261022T035808Z_kv_mps_float32_93507c4.json` | mps | float32 | Apple M4 | 2.14.1 | 3.12.14 | 4 | `93507c4` | False |
+| `20261022T040019Z_kv_mps_float16_93507c4.json` | mps | float16 | Apple M4 | 2.14.1 | 3.12.14 | 4 | `93507c4` | False |
 <!-- END GENERATED:environment -->
 
 ## Experiment 02 · Attention: reference vs PyTorch SDPA
@@ -311,3 +314,97 @@ Oracle: cpu float64, reference backend; 112,111 held-out targets; greedy: 8 prom
 | 44 | 21.068 | 4.3970 |
 | **mean ± sd (n=3)** | **19.213 ± 1.753** | |
 <!-- END GENERATED:seeds -->
+
+## Experiment 03 · KV cache: cached vs uncached decoding (corpus-independent)
+
+<!-- BEGIN GENERATED:kv -->
+**cpu/float32** · 64 greedy tokens · median total ms over 5 repeats · step 0 is the prefill
+
+| B | Prompt | Cached | Uncached (SDPA) | Uncached (default) | Cache speedup vs SDPA | vs default | Cached decode ms/step | Tokens identical |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
+| 1 | 1 | 21.1 | 46.2 | 52.0 | 2.19× | 2.46× | 0.32 | yes |
+| 1 | 16 | 21.7 | 55.9 | 65.3 | 2.58× | 3.02× | 0.33 | yes |
+| 1 | 128 | 26.6 | 117.4 | 153.1 | 4.41× | 5.74× | 0.38 | yes |
+| 1 | 512 | 39.2 | 392.8 | 744.5 | 10.02× | 18.99× | 0.52 | yes |
+| 1 | 1024 | 64.1 | 1025.6 | 2449.9 | 15.99× | 38.20× | 0.78 | yes |
+| 8 | 1 | 38.7 | 145.2 | 168.7 | 3.75× | 4.36× | 0.61 | yes |
+| 8 | 16 | 42.9 | 192.9 | 225.9 | 4.50× | 5.27× | 0.65 | yes |
+| 8 | 128 | 73.1 | 664.4 | 852.5 | 9.09× | 11.67× | 0.99 | yes |
+| 8 | 512 | 159.2 | 3143.2 | 6026.2 | 19.74× | 37.85× | 1.69 | yes |
+| 8 | 1024 | 399.2 | 9256.2 | 24852.5 | 23.19× | 62.26× | 4.38 | yes |
+
+Past the window (context 128, prompt 32, 224 tokens): 128 of 224 cached steps rebuild the cache; cached 237.9 ms vs uncached SDPA 328.5 ms (1.38×); tokens identical: yes.
+
+**mps/float32** · 64 greedy tokens · median total ms over 5 repeats · step 0 is the prefill
+
+| B | Prompt | Cached | Uncached (SDPA) | Uncached (default) | Cache speedup vs SDPA | vs default | Cached decode ms/step | Tokens identical |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
+| 1 | 1 | 106.7 | 94.1 | 101.2 | 0.88× | 0.95× | 1.68 | yes |
+| 1 | 16 | 108.7 | 95.0 | 102.1 | 0.87× | 0.94× | 1.70 | yes |
+| 1 | 128 | 110.1 | 124.2 | 133.4 | 1.13× | 1.21× | 1.72 | yes |
+| 1 | 512 | 126.1 | 252.6 | 301.0 | 2.00× | 2.39× | 1.81 | yes |
+| 1 | 1024 | 160.1 | 547.5 | 985.8 | 3.42× | 6.16× | 2.44 | yes |
+| 8 | 1 | 127.2 | 156.3 | 174.4 | 1.23× | 1.37× | 1.97 | yes |
+| 8 | 16 | 136.7 | 205.7 | 234.1 | 1.50× | 1.71× | 2.12 | yes |
+| 8 | 128 | 255.4 | 542.7 | 677.8 | 2.12× | 2.65× | 3.75 | yes |
+| 8 | 512 | 338.6 | 2115.3 | 2672.6 | 6.25× | 7.89× | 4.50 | yes |
+| 8 | 1024 | 475.1 | 4506.9 | 5765.1 | 9.49× | 12.13× | 6.38 | yes |
+
+Past the window (context 128, prompt 32, 224 tokens): 128 of 224 cached steps rebuild the cache; cached 399.2 ms vs uncached SDPA 403.6 ms (1.01×); tokens identical: yes.
+
+**mps/float16** · 64 greedy tokens · median total ms over 5 repeats · step 0 is the prefill
+
+| B | Prompt | Cached | Uncached (SDPA) | Uncached (default) | Cache speedup vs SDPA | vs default | Cached decode ms/step | Tokens identical |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
+| 1 | 1 | 101.0 | 89.8 | 97.2 | 0.89× | 0.96× | 1.56 | yes |
+| 1 | 16 | 102.0 | 94.7 | 100.7 | 0.93× | 0.99× | 1.58 | yes |
+| 1 | 128 | 102.7 | 122.7 | 131.1 | 1.19× | 1.28× | 1.57 | **no** |
+| 1 | 512 | 120.5 | 231.1 | 266.2 | 1.92× | 2.21× | 1.77 | yes |
+| 1 | 1024 | 153.6 | 505.1 | 591.2 | 3.29× | 3.85× | 2.27 | yes |
+| 8 | 1 | 118.4 | 151.0 | 166.5 | 1.28× | 1.41× | 1.86 | **no** |
+| 8 | 16 | 125.7 | 184.1 | 213.8 | 1.46× | 1.70× | 1.97 | yes |
+| 8 | 128 | 194.4 | 461.4 | 516.9 | 2.37× | 2.66× | 2.97 | yes |
+| 8 | 512 | 314.1 | 1698.3 | 2062.4 | 5.41× | 6.57× | 4.17 | yes |
+| 8 | 1024 | 405.2 | 3712.9 | 4647.8 | 9.16× | 11.47× | 5.18 | yes |
+
+Past the window (context 128, prompt 32, 224 tokens): 128 of 224 cached steps rebuild the cache; cached 380.1 ms vs uncached SDPA 377.6 ms (0.99×); tokens identical: yes.
+<!-- END GENERATED:kv -->
+
+### Cache memory growth
+
+<!-- BEGIN GENERATED:kv_memory -->
+| Target | B | Cached positions | Cache bytes | Bytes per position per sequence | Live-allocator peak during step (MPS) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| cpu/float32 | 1 | 129 | 0.76 MiB | 6144 | – |
+| cpu/float32 | 1 | 191 | 1.12 MiB | 6144 | – |
+| cpu/float32 | 8 | 129 | 6.05 MiB | 6144 | – |
+| cpu/float32 | 8 | 191 | 8.95 MiB | 6144 | – |
+| mps/float32 | 1 | 129 | 0.76 MiB | 6144 | 0.77 MiB |
+| mps/float32 | 1 | 191 | 1.12 MiB | 6144 | 1.13 MiB |
+| mps/float32 | 8 | 129 | 6.05 MiB | 6144 | 6.14 MiB |
+| mps/float32 | 8 | 191 | 8.95 MiB | 6144 | 11.44 MiB |
+| mps/float16 | 1 | 129 | 0.38 MiB | 3072 | 0.39 MiB |
+| mps/float16 | 1 | 191 | 0.56 MiB | 3072 | 0.57 MiB |
+| mps/float16 | 8 | 129 | 3.02 MiB | 3072 | 3.07 MiB |
+| mps/float16 | 8 | 191 | 4.48 MiB | 3072 | 4.52 MiB |
+<!-- END GENERATED:kv_memory -->
+
+## Experiment 04 · Matched training: default attention vs SDPA (science-v1 corpus)
+
+<!-- BEGIN GENERATED:sdpa_training -->
+<!-- END GENERATED:sdpa_training -->
+
+# Part B · Corpus protocol science-v2
+
+Results in this part use a different corpus and preprocessing protocol from Part A.
+**Perplexities are not comparable across the two parts.**
+
+## Corpus science-v2
+
+<!-- BEGIN GENERATED:v2_corpus -->
+<!-- END GENERATED:v2_corpus -->
+
+## Results under science-v2
+
+<!-- BEGIN GENERATED:v2_results -->
+<!-- END GENERATED:v2_results -->

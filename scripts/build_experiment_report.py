@@ -157,7 +157,7 @@ def svg(title: str, description: str, width: int, height: int, body: str) -> str
 </style></svg>"""
 
 
-def log_panel(x0: float, y0: float, w: float, h: float, heading: str, series: list[tuple], y_label: str, y_fmt, reference_line: float | None = None) -> str:
+def log_panel(x0: float, y0: float, w: float, h: float, heading: str, series: list[tuple], y_label: str, y_fmt, reference_line: float | None = None, x_label: str = "sequence length (tokens)") -> str:
     """Line panel with log2 x (sequence length) and log10 y. series: (label, color, [(x, y, tip)])."""
     points = [p for _, _, pts in series for p in pts]
     if not points:
@@ -193,7 +193,7 @@ def log_panel(x0: float, y0: float, w: float, h: float, heading: str, series: li
         body += f'<line x1="{left}" x2="{right}" y1="{y:.1f}" y2="{y:.1f}" stroke="{MUTED}" stroke-width="1.5" stroke-dasharray="5 4"/>'
     for x in xs:
         body += f'<text x="{px(x):.1f}" y="{bottom + 18}" text-anchor="middle" class="axis">{x}</text>'
-    body += f'<text x="{(left + right) / 2:.1f}" y="{y0 + h - 4}" text-anchor="middle" class="small">sequence length (tokens)</text>'
+    body += f'<text x="{(left + right) / 2:.1f}" y="{y0 + h - 4}" text-anchor="middle" class="small">{x_label}</text>'
     body += f'<text transform="translate({x0 + 14},{(top + bottom) / 2:.1f}) rotate(-90)" text-anchor="middle" class="small">{html.escape(y_label)}</text>'
     for label, color, pts in series:
         coords = " ".join(f"{px(x):.1f},{py(y):.1f}" for x, y, _ in pts)
@@ -287,6 +287,165 @@ def figures(records: dict[str, dict]) -> list[tuple[str, str]]:
     ]
 
 
+def latest_by_name(directory: Path) -> dict[str, dict]:
+    """Latest record per record name (the part between timestamp and commit)."""
+    chosen = {}
+    for path in sorted(directory.glob("*.json")):
+        record = json.loads(path.read_text(encoding="utf-8"))
+        record["_path"] = str(path.relative_to(ROOT))
+        chosen[path.stem.split("_", 1)[1].rsplit("_", 1)[0]] = record
+    return chosen
+
+
+def mean_sd(values: list[float]) -> str:
+    mean = sum(values) / len(values)
+    sd = math.sqrt(sum((v - mean) ** 2 for v in values) / (len(values) - 1)) if len(values) > 1 else 0.0
+    return f"{mean:.3f} ± {sd:.3f}"
+
+
+def kv_table(key: str, record: dict) -> str:
+    results, settings = record["results"], record["settings"]
+    lines = [
+        f"**{key}** · {settings['new_tokens']} greedy tokens · median total ms over {settings['repeats']} repeats · step 0 is the prefill",
+        "",
+        "| B | Prompt | Cached | Uncached (SDPA) | Uncached (default) | Cache speedup vs SDPA | vs default | Cached decode ms/step | Tokens identical |",
+        "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |",
+    ]
+    for row in results["grid"]:
+        same = "yes" if all(row["token_identical_to_cached"].values()) else "**no**"
+        lines.append(
+            f"| {row['batch']} | {row['prompt_len']} | {row['cached']['total_ms']['median']:.1f} | {row['uncached_sdpa']['total_ms']['median']:.1f} "
+            f"| {row['uncached_default']['total_ms']['median']:.1f} | {row['speedup_cached_vs_uncached_sdpa']:.2f}× | {row['speedup_cached_vs_uncached_default']:.2f}× "
+            f"| {row['cached']['decode_ms_per_step']['median']:.2f} | {same} |"
+        )
+    window = results["window"]
+    refreshed = sum(window["cached"]["refreshed_steps"])
+    lines += [
+        "",
+        (f"Past the window (context {window['context_length']}, prompt {window['prompt_len']}, {window['new_tokens']} tokens): "
+        f"{refreshed} of {window['new_tokens']} cached steps rebuild the cache; cached {window['cached']['total_ms']['median']:.1f} ms vs "
+        f"uncached SDPA {window['uncached_sdpa']['total_ms']['median']:.1f} ms ({window['speedup_cached_vs_uncached_sdpa']:.2f}×); "
+        f"tokens identical: {'yes' if all(window['token_identical_to_cached'].values()) else 'no'}."),
+    ]
+    return "\n".join(lines)
+
+
+def kv_memory_table(records: dict[str, dict]) -> str:
+    lines = ["| Target | B | Cached positions | Cache bytes | Bytes per position per sequence | Live-allocator peak during step (MPS) |", "| --- | ---: | ---: | ---: | ---: | ---: |"]
+    for key, record in records.items():
+        for growth in record["results"]["memory"][:-1]:
+            for step in (growth["steps"][1], growth["steps"][-1]):
+                per = step["cache_bytes"] / step["cached_positions"] / growth["batch"]
+                peak = f"{step['step_peak_minus_start_bytes'] / 2**20:.2f} MiB" if "step_peak_minus_start_bytes" in step else "–"
+                lines.append(f"| {key} | {growth['batch']} | {step['cached_positions']} | {step['cache_bytes'] / 2**20:.2f} MiB | {per:.0f} | {peak} |")
+    return "\n".join(lines)
+
+
+def training_rows(training: dict[str, dict], evaluations: dict[str, dict], protocol: str, eval_names: list[str]) -> list[dict]:
+    rows = []
+    for record in training.values():
+        settings = record["settings"]
+        if settings.get("protocol") != protocol or not record["results"].get("run_summary"):
+            continue
+        run = record["results"]["run_summary"]
+        row = {"seed": settings["seed"], "backend": settings["attention_backend"], "best_step": record["results"]["best_step"],
+               "tokens_per_second": run["train_tokens_per_second"], "train_seconds": run["train_seconds"],
+               "peak_rss_mib": run["process_peak_rss_bytes"] / 2**20, "record": record["_path"]}
+        for name in eval_names:
+            for result in evaluations.get(name, {}).get("results", []):
+                if result["seed"] == row["seed"] and result["attention_backend"] == row["backend"]:
+                    row[name] = result["splits"]
+        rows.append(row)
+    return sorted(rows, key=lambda r: (r["seed"], r["backend"]))
+
+
+def sdpa_training_table(rows: list[dict]) -> str:
+    lines = [
+        "| Seed | Backend | Selected step | Val loss | Val perplexity | Train tok/s | Train s | Peak RSS MiB | Eval s (CPU) | Eval s (MPS) |",
+        "| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for row in rows:
+        cpu, mps = row.get("sdpa_v1_eval_cpu", {}), row.get("sdpa_v1_eval_mps", {})
+        validation = cpu.get("validation") or {}
+        lines.append(
+            f"| {row['seed']} | {BACKEND_LABEL[row['backend']]} | {row['best_step']} | {validation.get('validation_loss', float('nan')):.4f} "
+            f"| {validation.get('perplexity', float('nan')):.3f} | {row['tokens_per_second']:.0f} | {row['train_seconds']:.1f} | {row['peak_rss_mib']:.0f} "
+            f"| {cpu.get('validation', {}).get('eval_seconds', float('nan')):.2f} | {mps.get('validation', {}).get('eval_seconds', float('nan')):.2f} |"
+        )
+    lines += ["", "| Backend | n | Val perplexity mean ± sd | Train tok/s mean ± sd | Peak RSS MiB mean ± sd | CPU eval s mean ± sd |", "| --- | ---: | ---: | ---: | ---: | ---: |"]
+    for backend in ("auto", "sdpa"):
+        group = [r for r in rows if r["backend"] == backend and "sdpa_v1_eval_cpu" in r]
+        if group:
+            lines.append(
+                f"| {BACKEND_LABEL[backend]} | {len(group)} | {mean_sd([r['sdpa_v1_eval_cpu']['validation']['perplexity'] for r in group])} "
+                f"| {mean_sd([r['tokens_per_second'] for r in group])} | {mean_sd([r['peak_rss_mib'] for r in group])} "
+                f"| {mean_sd([r['sdpa_v1_eval_cpu']['validation']['eval_seconds'] for r in group])} |"
+            )
+    paired = []
+    for seed in sorted({r["seed"] for r in rows}):
+        pair = {r["backend"]: r for r in rows if r["seed"] == seed and "sdpa_v1_eval_cpu" in r}
+        if {"auto", "sdpa"} <= pair.keys():
+            paired.append((seed, pair["sdpa"]["sdpa_v1_eval_cpu"]["validation"]["perplexity"] - pair["auto"]["sdpa_v1_eval_cpu"]["validation"]["perplexity"],
+                           pair["sdpa"]["tokens_per_second"] / pair["auto"]["tokens_per_second"]))
+    if paired:
+        lines += ["", "| Seed | SDPA − default val perplexity | SDPA / default train tok/s |", "| ---: | ---: | ---: |"]
+        lines += [f"| {seed} | {delta:+.3f} | {ratio:.3f}× |" for seed, delta, ratio in paired]
+    return "\n".join(lines)
+
+
+def v2_table(rows: list[dict]) -> str:
+    lines = [
+        "| Seed | Backend | Selected step (on validation) | Val perplexity | Val bits/byte | **Test perplexity** | **Test bits/byte** | Darwin val ppl | Einstein val ppl |",
+        "| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for row in rows:
+        s = row.get("v2_final_cpu")
+        if not s:
+            continue
+        lines.append(
+            f"| {row['seed']} | {BACKEND_LABEL[row['backend']]} | {row['best_step']} | {s['validation']['perplexity']:.3f} | {s['validation']['bits_per_byte']:.4f} "
+            f"| **{s['test']['perplexity']:.3f}** | **{s['test']['bits_per_byte']:.4f}** | {s['darwin_validation']['perplexity']:.3f} | {s['einstein_validation']['perplexity']:.3f} |"
+        )
+    lines += ["", "| Backend | n | Val perplexity mean ± sd | Test perplexity mean ± sd |", "| --- | ---: | ---: | ---: |"]
+    for backend in ("auto", "sdpa"):
+        group = [r for r in rows if r["backend"] == backend and "v2_final_cpu" in r]
+        if group:
+            lines.append(f"| {BACKEND_LABEL[backend]} | {len(group)} | {mean_sd([r['v2_final_cpu']['validation']['perplexity'] for r in group])} | {mean_sd([r['v2_final_cpu']['test']['perplexity'] for r in group])} |")
+    return "\n".join(lines)
+
+
+def v2_corpus_table(manifest: dict) -> str:
+    lines = ["| Source | Role | Body SHA-256 | Main-text paragraphs | Dropped (rule: count) | Kept | Train paragraphs |", "| --- | --- | --- | ---: | --- | ---: | ---: |"]
+    for s in manifest["sources"]:
+        dropped = ", ".join(f"{k}: {v}" for k, v in s["dropped_paragraphs"].items()) or "–"
+        lines.append(f"| {s['title']} ({s['author']}) | {s['role']} | `{s['body_sha256'][:12]}…` | {s['main_text_paragraphs']} | {dropped} | {s['kept_paragraphs']} | {s.get('train_paragraphs', '–')} |")
+    lines += ["", "| File | Bytes | SHA-256 |", "| --- | ---: | --- |"]
+    lines += [f"| `{name}` | {info['bytes']:,} | `{info['sha256'][:16]}…` |" for name, info in manifest["files"].items()]
+    lines += ["", "| Check | Paragraphs | Exact duplicates | Near duplicates (≥50% word 8-grams) | Mean 8-gram overlap |", "| --- | ---: | ---: | ---: | ---: |"]
+    lines += [f"| {name} | {c['paragraphs']} | {c['exact_duplicates']} | {c['near_duplicates']} | {c['mean_ngram_overlap']:.5f} |" for name, c in manifest["contamination_checks"].items()]
+    return "\n".join(lines)
+
+
+def kv_figure(records: dict[str, dict]) -> tuple[str, str]:
+    panels = []
+    for key, record in records.items():
+        series = []
+        for color, batch in zip(SERIES, record["settings"]["batch_sizes"]):
+            pts = [(max(row["prompt_len"], 1), row["speedup_cached_vs_uncached_sdpa"],
+                    f"{key} B={batch} prompt={row['prompt_len']}: cached is {row['speedup_cached_vs_uncached_sdpa']:.2f}x uncached SDPA")
+                   for row in record["results"]["grid"] if row["batch"] == batch]
+            series.append((f"batch {batch}", color, pts))
+        panels.append((key, series, "uncached ÷ cached total time", lambda v: f"{v:g}×", 1.0, "prompt length (tokens)"))
+    batches = next(iter(records.values()))["settings"]["batch_sizes"]
+    some = next(iter(records.values()))["settings"]
+    return grid_figure(
+        "kv_cache_speedup.svg", "EXPERIMENT 03 / KV CACHE", "When does the KV cache pay off?",
+        f"Time to generate {some['new_tokens']} tokens, uncached (SDPA) divided by cached. Below the dashed line, caching is slower.",
+        f"Same weights, prompts, dtype and attention kernel · {some['repeats']} repeats · source: experiments/records/kv_cache",
+        panels, [(f"batch {b}", c) for c, b in zip(SERIES, batches)],
+    )
+
+
 def replace_section(text: str, name: str, content: str) -> str:
     pattern = re.compile(rf"(<!-- BEGIN GENERATED:{name} -->\n).*?(<!-- END GENERATED:{name} -->)", re.DOTALL)
     if not pattern.search(text):
@@ -309,14 +468,32 @@ def main() -> None:
         record = list(quality.values())[-1]
         sections["quality"] = quality_table(record)
         sections["seeds"] = seed_table(record)
+    kv = latest(RECORDS / "kv_cache")
+    extra_figures = []
+    if kv:
+        sections["kv"] = "\n\n".join(kv_table(key, record) for key, record in kv.items())
+        sections["kv_memory"] = kv_memory_table(kv)
+        sections["environment"] = environment_table(list(speed.values()) + list(quality.values()) + list(kv.values()))
+        extra_figures.append(kv_figure(kv))
+    training = latest_by_name(RECORDS / "training") if (RECORDS / "training").exists() else {}
+    evaluations = latest_by_name(RECORDS / "evaluation") if (RECORDS / "evaluation").exists() else {}
+    v1_rows = training_rows(training, evaluations, "science-v1", ["sdpa_v1_eval_cpu", "sdpa_v1_eval_mps"])
+    if v1_rows:
+        sections["sdpa_training"] = sdpa_training_table(v1_rows)
+    v2_manifest = ROOT / "data/science-v2/manifest.json"
+    if v2_manifest.exists():
+        sections["v2_corpus"] = v2_corpus_table(json.loads(v2_manifest.read_text(encoding="utf-8")))
+    v2_rows = training_rows(training, evaluations, "science-v2", ["v2_final_cpu"])
+    if any("v2_final_cpu" in row for row in v2_rows):
+        sections["v2_results"] = v2_table(v2_rows)
     text = REPORT.read_text(encoding="utf-8")
     for name, content in sections.items():
         text = replace_section(text, name, content)
     REPORT.write_text(text, encoding="utf-8")
     FIGURES.mkdir(parents=True, exist_ok=True)
-    for name, content in figures(speed):
+    for name, content in figures(speed) + extra_figures:
         (FIGURES / name).write_text(content, encoding="utf-8")
-    print(f"updated {REPORT.relative_to(ROOT)} and attention figures from {len(speed) + len(quality)} records")
+    print(f"updated {REPORT.relative_to(ROOT)} with sections: {', '.join(sections)}")
 
 
 if __name__ == "__main__":
