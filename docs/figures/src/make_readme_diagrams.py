@@ -40,8 +40,8 @@ class Figure:
         lines = [(title, size, weight, False)] + [(d, size - 2, 400, True) for d in details]
         step = 15
         top = y + h / 2 - step * (len(lines) - 1) / 2
-        for index, (s, font, weight, muted) in enumerate(lines):
-            self.text(x + w / 2, top + index * step, s, font, weight=weight, muted=muted)
+        for index, (s, font, line_weight, muted) in enumerate(lines):
+            self.text(x + w / 2, top + index * step, s, font, weight=line_weight, muted=muted)
 
     def path(self, points, arrow=True, dashed=False, dotted=False) -> None:
         d = "M " + " L ".join(f"{px} {py}" for px, py in points)
