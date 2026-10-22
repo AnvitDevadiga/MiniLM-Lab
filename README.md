@@ -4,10 +4,8 @@ A small decoder-only Transformer, trained on byte-level science prose, used as a
 
 ## Architecture
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/architecture-dark.svg">
-  <img alt="MiniLM architecture: byte token embedding plus learned position embedding, four pre-norm decoder blocks (RMSNorm, causal self-attention, residual add; RMSNorm, SwiGLU MLP, residual add), final RMSNorm and an LM head tied to the token embedding." src="docs/figures/architecture-light.svg" width="720">
-</picture>
+![MiniLM Lab architecture](docs/figures/architecture-light.svg#gh-light-mode-only)
+![MiniLM Lab architecture](docs/figures/architecture-dark.svg#gh-dark-mode-only)
 
 Defaults: d = 192, 4 layers, 6 heads, context 128, vocabulary 256 (UTF-8 bytes). Options: RoPE instead of learned positions, LayerNorm instead of RMSNorm, GELU MLP instead of SwiGLU.
 
