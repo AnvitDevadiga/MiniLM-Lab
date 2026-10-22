@@ -243,3 +243,27 @@ def test_validator_failure_propagates_through_exit_codes_and_pipelines(records: 
     assert piped.returncode == 1
     clean = [sys.executable, str(ROOT / "scripts/validate_records.py")]
     assert subprocess.run(clean, check=False, capture_output=True, cwd=ROOT).returncode == 0
+
+
+# ---------------------------------------------------------------- attested identities (finding 1 for historical runs)
+
+ATTESTATION = "identity/20261022T053914Z_model_identity_attestation_935a229.json"
+
+
+def test_attestation_with_wrong_checkpoint_hash_is_rejected(records: Path) -> None:
+    record = read(records, ATTESTATION)
+    record["results"]["attested"][0]["checkpoint_sha256"] = "0" * 64
+    write(records, ATTESTATION, record)
+    assert any("checkpoint hash differs" in p for p in problems(records))
+
+
+def test_inconsistent_regeneration_check_is_rejected(records: Path) -> None:
+    record = read(records, ATTESTATION)
+    record["results"]["regeneration_checks"][0]["model_identity_sha256"] = "1" * 64
+    write(records, ATTESTATION, record)
+    assert any("regeneration check" in p for p in problems(records))
+
+
+def test_attested_identity_is_enforced_for_historical_evaluations(records: Path) -> None:
+    mutate_evaluation(records, V1_EVAL, lambda r: r["results"][0].update(model_identity_sha256="2" * 64))
+    assert any("model identity differs" in p for p in problems(records))
