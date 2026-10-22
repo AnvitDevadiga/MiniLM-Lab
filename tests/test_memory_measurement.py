@@ -25,8 +25,7 @@ def test_cuda_uses_device_allocator_peak_not_host_rss(monkeypatch: pytest.Monkey
     assert provenance.measure_peak_memory("cuda", allocate) == (5_000_000, "cuda_max_memory_allocated_delta")
 
 
-@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="MPS not available")
-def test_mps_uses_live_allocator_peak(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_mps_uses_live_allocator_peak(monkeypatch: pytest.MonkeyPatch, mps_device: str) -> None:
     monkeypatch.setattr(provenance, "peak_rss_bytes", lambda: pytest.fail("host RSS used for MPS"))
     extra, method = provenance.measure_peak_memory("mps", lambda: torch.ones(2**20, device="mps") * 2)
     assert method == "mps_live_allocated_peak_per_op" and extra >= 2 * 4 * 2**20

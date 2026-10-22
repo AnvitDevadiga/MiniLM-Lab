@@ -97,8 +97,7 @@ def test_hashing_does_not_mutate_model_state() -> None:
     assert model.training
 
 
-@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="MPS not available")
-def test_device_does_not_change_digest_or_move_tensors() -> None:
+def test_device_does_not_change_digest_or_move_tensors(mps_device: str) -> None:
     weights, config = state(0)
     on_mps = {name: tensor.to("mps") for name, tensor in weights.items()}
     assert model_identity(on_mps, config) == model_identity(weights, config)
