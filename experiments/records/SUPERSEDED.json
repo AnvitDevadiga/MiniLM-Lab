@@ -32,6 +32,14 @@
     "training/20261022T040350Z_training_science-v1_auto_seed42_48e95f8.json": {
       "reason": "recorded while unrelated documentation edits were uncommitted (git.dirty = true)",
       "superseded_by": "training/20261022T041654Z_training_science-v1_auto_seed42_48e95f8.json"
+    },
+    "legacy/20261022T045414Z_legacy_kv_cache_cpu_13530f4.json": {
+      "reason": "recorded while README/doc edits were uncommitted (git.dirty = true); code was committed",
+      "superseded_by": "legacy/20261022T045428Z_legacy_kv_cache_cpu_13530f4.json"
+    },
+    "legacy/20261022T045419Z_legacy_int8_cpu_13530f4.json": {
+      "reason": "recorded while README/doc edits were uncommitted (git.dirty = true); code was committed",
+      "superseded_by": "legacy/20261022T045433Z_legacy_int8_cpu_13530f4.json"
     }
   }
 }
