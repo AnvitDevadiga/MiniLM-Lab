@@ -27,20 +27,25 @@ paths are untested.
 
 1. **The three attention implementations compute the same function.** In float32,
    legacy MHA, SDPA and the explicit reference give identical held-out perplexity to
-   four decimals, 100% top-1 agreement with a float64 oracle and identical greedy text,
-   on CPU and MPS, for three trained seeds. Gradients agree with a float64 oracle and
-   pass `gradcheck` under every backend.
+   four decimals, 100% top-1 agreement with a float64 reference run and identical greedy
+   text, on CPU and MPS, for three trained seeds. Gradients agree with the float64
+   reference and pass `gradcheck` under every backend. The "float64 oracle" is not
+   float64 throughout: attention, matmuls and the loss run in float64, but RMSNorm variance and RoPE angles are computed in float32 even for float64 inputs (then cast back), so it bounds
+   errors at roughly float32 precision in those two operations.
 2. **Inference: SDPA is faster at every shape and the gap grows with length**
    (reference/SDPA forward 1.2–1.3× at L=128 → 3.4–3.9× at L=2048 on CPU; 2.0–3.1× →
    3.9–5.4× on MPS) **and avoids the L² score matrix** (B=8, L=2048: 223 vs 1,765 MiB on
    CPU fp32, 180 vs 1,608 MiB on MPS fp32, 90 vs 1,950 MiB on MPS fp16).
 3. **The legacy MHA path is close to the reference on CPU at inference** (1,439 ms vs
    321 ms for SDPA at B=8, L=2048) and 1.1–1.6× slower than SDPA on MPS.
-4. **KV cache.** On CPU the cache is faster at every measured shape: 2.2–16× over
-   uncached SDPA at batch 1 and 3.8–23× at batch 8 (up to 62× over the uncached legacy MHA
-   path). On MPS at batch 1 with prompts of 1–16 tokens it is *slower* (0.87–0.88×);
-   it pays off from 128 tokens (1.1×) and reaches 3.4× at 1,024. Past the context
-   window every step rebuilds the cache, so caching gives ~1.0× on MPS. Cached and
+4. **KV cache.** On CPU the cache is faster at every measured shape: 2.2–15× over
+   uncached SDPA at batch 1 and 3.7–23× at batch 8 (up to 63× over the uncached legacy MHA
+   path). On MPS at batch 1 with prompts of 1–16 tokens it is *slower* (0.88× fp32,
+   0.89–0.91× fp16); it pays off from 128 tokens (1.1×) and reaches 3.6× at 1,024 (fp32).
+   Past the context window every step rebuilds the cache, so caching gives 0.94–1.00×
+   on MPS. These values come from the October 22 re-measurement that stores raw
+   per-repeat samples; the first KV records (summaries only) are superseded, and their
+   speedups agree within ±0.5× at every point. Cached and
    uncached greedy tokens are identical in every fp32 configuration; in fp16 they
    differ in 2 of 11 configurations (near-tie argmax flips with random weights).
    Cache memory grows by exactly 6,144 bytes per position per sequence (fp32), and
@@ -88,13 +93,22 @@ backend remains selectable but did not produce any published training result.
   without touching weights. Inputs are seeded; dtype and device are fixed per record.
 - **Timing.** Warmups, then repeated trials with backend/mode order rotated each
   repeat; devices are synchronized around every timed region; decode steps are timed
-  individually. Medians, p95, IQR and CV come from raw samples stored in each record.
-- **Memory.** One fresh process per point. CPU: peak-RSS delta. MPS: live allocator
-  bytes sampled after every aten op (forward and backward). Earlier MPS records using
+  individually. Medians, p95, IQR and CV are computed from raw samples stored in each
+  current record, and `scripts/validate_records.py` recomputes them to check. The three
+  historical KV-cache records stored summaries only; they are superseded and their
+  samples cannot be recovered.
+- **Memory.** One fresh process per point (`provenance.measure_peak_memory`). CPU: host
+  peak-RSS delta. MPS: live allocator bytes sampled after every aten op (forward and
+  backward). CUDA would use the device allocator peak; it is untested and no CUDA
+  memory is reported. Earlier MPS records using
   driver pool size (~1 GiB granularity) are kept but superseded.
-- **Quality.** Oracle = reference backend in float64 on CPU (the softmax runs in
-  float64 since the fix described in the audit). Perplexity uses the repository's
+- **Quality.** Oracle = reference backend in float64 on CPU: attention, softmax, matmuls
+  and loss in float64, but RMSNorm variance and RoPE angles are computed in float32 even for float64 inputs. Perplexity uses the repository's
   non-overlapping 128-token chunking, with loss computed in fp32.
+- **Provenance.** Every table joins evaluations to training runs by checkpoint SHA-256
+  (and model identity where recorded or attested), checks seeds, backends, protocols
+  and dataset hashes, and refuses to build on any conflict; see
+  [RECORD_SCHEMA.md](RECORD_SCHEMA.md).
 - **Training comparison.** Identical command, data, seeds and hardware (CPU, fp32);
   only `--attention-backend` differs; backend order alternates per seed. Default-path
   checkpoints are bitwise identical to the original v1 runs.
@@ -159,9 +173,9 @@ report uses the latest record per name or device/dtype; superseded records stay 
 | `20261022T034036Z_attention_mps_float32_0502118.json` | mps | float32 | Apple M4 | 2.14.1 | 3.12.14 | 4 | `0502118` | False |
 | `20261022T034304Z_attention_mps_float16_0502118.json` | mps | float16 | Apple M4 | 2.14.1 | 3.12.14 | 4 | `0502118` | False |
 | `20261022T041752Z_attention_quality_48e95f8.json` | cpu,mps | mixed | Apple M4 | 2.14.1 | 3.12.14 | 4 | `48e95f8` | False |
-| `20261022T035538Z_kv_cpu_float32_93507c4.json` | cpu | float32 | Apple M4 | 2.14.1 | 3.12.14 | 4 | `93507c4` | False |
-| `20261022T035808Z_kv_mps_float32_93507c4.json` | mps | float32 | Apple M4 | 2.14.1 | 3.12.14 | 4 | `93507c4` | False |
-| `20261022T040019Z_kv_mps_float16_93507c4.json` | mps | float16 | Apple M4 | 2.14.1 | 3.12.14 | 4 | `93507c4` | False |
+| `20261022T053124Z_kv_cpu_float32_57be26d.json` | cpu | float32 | Apple M4 | 2.14.1 | 3.12.14 | 4 | `57be26d` | False |
+| `20261022T053346Z_kv_mps_float32_57be26d.json` | mps | float32 | Apple M4 | 2.14.1 | 3.12.14 | 4 | `57be26d` | False |
+| `20261022T053547Z_kv_mps_float16_57be26d.json` | mps | float16 | Apple M4 | 2.14.1 | 3.12.14 | 4 | `57be26d` | False |
 <!-- END GENERATED:environment -->
 
 # Part A · Systems experiments and corpus science-v1 (legacy)
@@ -315,7 +329,7 @@ report uses the latest record per name or device/dtype; superseded records stay 
 ### Numerical correctness and output quality (trained checkpoints)
 
 <!-- BEGIN GENERATED:quality -->
-Oracle: cpu float64, reference backend; 112,111 held-out targets; greedy: 8 prompts × 64 tokens.
+Oracle: cpu float64, reference backend (RMSNorm variance and RoPE angles still run in float32); 112,111 held-out targets; greedy: 8 prompts × 64 tokens.
 
 | Seed | Target | Backend | max abs Δlogit | mean abs Δlogit | top-1 agree | Perplexity | Greedy identical |
 | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -375,52 +389,52 @@ Oracle: cpu float64, reference backend; 112,111 held-out targets; greedy: 8 prom
 
 | B | Prompt | Cached | Uncached (SDPA) | Uncached (MHA) | Cache speedup vs SDPA | vs MHA | Cached decode ms/step | Tokens identical |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
-| 1 | 1 | 21.1 | 46.2 | 52.0 | 2.19× | 2.46× | 0.32 | yes |
-| 1 | 16 | 21.7 | 55.9 | 65.3 | 2.58× | 3.02× | 0.33 | yes |
-| 1 | 128 | 26.6 | 117.4 | 153.1 | 4.41× | 5.74× | 0.38 | yes |
-| 1 | 512 | 39.2 | 392.8 | 744.5 | 10.02× | 18.99× | 0.52 | yes |
-| 1 | 1024 | 64.1 | 1025.6 | 2449.9 | 15.99× | 38.20× | 0.78 | yes |
-| 8 | 1 | 38.7 | 145.2 | 168.7 | 3.75× | 4.36× | 0.61 | yes |
-| 8 | 16 | 42.9 | 192.9 | 225.9 | 4.50× | 5.27× | 0.65 | yes |
-| 8 | 128 | 73.1 | 664.4 | 852.5 | 9.09× | 11.67× | 0.99 | yes |
-| 8 | 512 | 159.2 | 3143.2 | 6026.2 | 19.74× | 37.85× | 1.69 | yes |
-| 8 | 1024 | 399.2 | 9256.2 | 24852.5 | 23.19× | 62.26× | 4.38 | yes |
+| 1 | 1 | 21.6 | 46.9 | 54.2 | 2.17× | 2.50× | 0.33 | yes |
+| 1 | 16 | 22.0 | 57.7 | 65.0 | 2.62× | 2.96× | 0.33 | yes |
+| 1 | 128 | 26.7 | 117.5 | 151.3 | 4.41× | 5.67× | 0.37 | yes |
+| 1 | 512 | 39.5 | 385.1 | 770.3 | 9.76× | 19.52× | 0.52 | yes |
+| 1 | 1024 | 65.8 | 1017.1 | 2459.4 | 15.46× | 37.39× | 0.81 | yes |
+| 8 | 1 | 39.0 | 144.6 | 169.6 | 3.71× | 4.35× | 0.64 | yes |
+| 8 | 16 | 43.0 | 196.6 | 226.8 | 4.57× | 5.27× | 0.69 | yes |
+| 8 | 128 | 66.6 | 640.3 | 835.9 | 9.62× | 12.55× | 0.93 | yes |
+| 8 | 512 | 157.1 | 3045.3 | 5610.6 | 19.38× | 35.70× | 1.65 | yes |
+| 8 | 1024 | 382.7 | 8932.2 | 24046.7 | 23.34× | 62.83× | 3.71 | yes |
 
-Past the window (context 128, prompt 32, 224 tokens): 128 of 224 cached steps rebuild the cache; cached 237.9 ms vs uncached SDPA 328.5 ms (1.38×); tokens identical: yes.
+Past the window (context 128, prompt 32, 224 tokens): 128 of 224 cached steps rebuild the cache; cached 231.6 ms vs uncached SDPA 321.4 ms (1.39×); tokens identical: yes.
 
 **mps/float32** · 64 greedy tokens · median total ms over 5 repeats · step 0 is the prefill
 
 | B | Prompt | Cached | Uncached (SDPA) | Uncached (MHA) | Cache speedup vs SDPA | vs MHA | Cached decode ms/step | Tokens identical |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
-| 1 | 1 | 106.7 | 94.1 | 101.2 | 0.88× | 0.95× | 1.68 | yes |
-| 1 | 16 | 108.7 | 95.0 | 102.1 | 0.87× | 0.94× | 1.70 | yes |
-| 1 | 128 | 110.1 | 124.2 | 133.4 | 1.13× | 1.21× | 1.72 | yes |
-| 1 | 512 | 126.1 | 252.6 | 301.0 | 2.00× | 2.39× | 1.81 | yes |
-| 1 | 1024 | 160.1 | 547.5 | 985.8 | 3.42× | 6.16× | 2.44 | yes |
-| 8 | 1 | 127.2 | 156.3 | 174.4 | 1.23× | 1.37× | 1.97 | yes |
-| 8 | 16 | 136.7 | 205.7 | 234.1 | 1.50× | 1.71× | 2.12 | yes |
-| 8 | 128 | 255.4 | 542.7 | 677.8 | 2.12× | 2.65× | 3.75 | yes |
-| 8 | 512 | 338.6 | 2115.3 | 2672.6 | 6.25× | 7.89× | 4.50 | yes |
-| 8 | 1024 | 475.1 | 4506.9 | 5765.1 | 9.49× | 12.13× | 6.38 | yes |
+| 1 | 1 | 106.3 | 93.8 | 100.6 | 0.88× | 0.95× | 1.68 | yes |
+| 1 | 16 | 107.7 | 94.9 | 102.5 | 0.88× | 0.95× | 1.69 | yes |
+| 1 | 128 | 109.7 | 123.1 | 132.4 | 1.12× | 1.21× | 1.72 | yes |
+| 1 | 512 | 124.9 | 247.6 | 295.3 | 1.98× | 2.36× | 1.81 | yes |
+| 1 | 1024 | 158.7 | 564.6 | 679.3 | 3.56× | 4.28× | 2.33 | yes |
+| 8 | 1 | 129.2 | 169.9 | 184.0 | 1.32× | 1.42× | 2.02 | yes |
+| 8 | 16 | 135.7 | 196.8 | 219.9 | 1.45× | 1.62× | 2.11 | yes |
+| 8 | 128 | 242.6 | 524.5 | 667.3 | 2.16× | 2.75× | 3.34 | yes |
+| 8 | 512 | 339.8 | 2054.9 | 2456.5 | 6.05× | 7.23× | 4.51 | yes |
+| 8 | 1024 | 446.6 | 4391.7 | 5630.7 | 9.83× | 12.61× | 5.61 | yes |
 
-Past the window (context 128, prompt 32, 224 tokens): 128 of 224 cached steps rebuild the cache; cached 399.2 ms vs uncached SDPA 403.6 ms (1.01×); tokens identical: yes.
+Past the window (context 128, prompt 32, 224 tokens): 128 of 224 cached steps rebuild the cache; cached 408.9 ms vs uncached SDPA 383.6 ms (0.94×); tokens identical: yes.
 
 **mps/float16** · 64 greedy tokens · median total ms over 5 repeats · step 0 is the prefill
 
 | B | Prompt | Cached | Uncached (SDPA) | Uncached (MHA) | Cache speedup vs SDPA | vs MHA | Cached decode ms/step | Tokens identical |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
-| 1 | 1 | 101.0 | 89.8 | 97.2 | 0.89× | 0.96× | 1.56 | yes |
-| 1 | 16 | 102.0 | 94.7 | 100.7 | 0.93× | 0.99× | 1.58 | yes |
-| 1 | 128 | 102.7 | 122.7 | 131.1 | 1.19× | 1.28× | 1.57 | **no** |
-| 1 | 512 | 120.5 | 231.1 | 266.2 | 1.92× | 2.21× | 1.77 | yes |
-| 1 | 1024 | 153.6 | 505.1 | 591.2 | 3.29× | 3.85× | 2.27 | yes |
-| 8 | 1 | 118.4 | 151.0 | 166.5 | 1.28× | 1.41× | 1.86 | **no** |
-| 8 | 16 | 125.7 | 184.1 | 213.8 | 1.46× | 1.70× | 1.97 | yes |
-| 8 | 128 | 194.4 | 461.4 | 516.9 | 2.37× | 2.66× | 2.97 | yes |
-| 8 | 512 | 314.1 | 1698.3 | 2062.4 | 5.41× | 6.57× | 4.17 | yes |
-| 8 | 1024 | 405.2 | 3712.9 | 4647.8 | 9.16× | 11.47× | 5.18 | yes |
+| 1 | 1 | 101.3 | 89.8 | 97.1 | 0.89× | 0.96× | 1.56 | yes |
+| 1 | 16 | 101.1 | 92.5 | 100.9 | 0.91× | 1.00× | 1.56 | yes |
+| 1 | 128 | 102.5 | 123.0 | 132.8 | 1.20× | 1.30× | 1.58 | **no** |
+| 1 | 512 | 118.3 | 229.8 | 266.0 | 1.94× | 2.25× | 1.74 | yes |
+| 1 | 1024 | 151.4 | 512.7 | 596.1 | 3.39× | 3.94× | 2.28 | yes |
+| 8 | 1 | 139.3 | 157.1 | 180.5 | 1.13× | 1.30× | 2.11 | **no** |
+| 8 | 16 | 126.5 | 184.6 | 211.1 | 1.46× | 1.67× | 1.98 | yes |
+| 8 | 128 | 207.5 | 523.9 | 566.8 | 2.53× | 2.73× | 3.05 | yes |
+| 8 | 512 | 334.9 | 1645.2 | 2027.3 | 4.91× | 6.05× | 4.58 | yes |
+| 8 | 1024 | 406.0 | 3532.7 | 4605.7 | 8.70× | 11.34× | 5.38 | yes |
 
-Past the window (context 128, prompt 32, 224 tokens): 128 of 224 cached steps rebuild the cache; cached 380.1 ms vs uncached SDPA 377.6 ms (0.99×); tokens identical: yes.
+Past the window (context 128, prompt 32, 224 tokens): 128 of 224 cached steps rebuild the cache; cached 376.7 ms vs uncached SDPA 376.8 ms (1.00×); tokens identical: yes.
 <!-- END GENERATED:kv -->
 
 ### Cache memory growth

@@ -32,9 +32,9 @@ PyTorch provides tensor operations, autograd and the SDPA kernel. The project ex
 
 All measurements: one Apple M4 MacBook (16 GB), CPU and MPS, Python 3.12.14, torch 2.14.1. Details and every per-seed value are in [docs/EXPERIMENT_RESULTS.md](docs/EXPERIMENT_RESULTS.md).
 
-1. **The attention backends compute the same function, but SDPA is far cheaper at long sequences.** In float32 all three give identical held-out perplexity, 100% top-1 agreement with a float64 oracle and identical greedy text. At 2,048 tokens SDPA's forward pass is 3.4–3.9× (CPU) and 3.9–5.4× (MPS) faster than the explicit reference, with 8–22× less extra memory at batch 8.
+1. **The attention backends compute the same function, but SDPA is far cheaper at long sequences.** In float32 all three give identical held-out perplexity, 100% top-1 agreement with a float64 reference run (whose RMSNorm variance and RoPE angles are still computed in float32) and identical greedy text. At 2,048 tokens SDPA's forward pass is 3.4–3.9× (CPU) and 3.9–5.4× (MPS) faster than the explicit reference, with 8–22× less extra memory at batch 8.
 2. **Training with SDPA matches the legacy path in quality and is as fast or faster.** Over three seeds on corpus v1, validation perplexity is 19.21 ± 1.75 (MHA) vs 19.04 ± 1.37 (SDPA). A controlled training-step benchmark is 5–28% faster with SDPA on CPU (L=128–1,024) and within 5% on MPS. SDPA is therefore the default from this release.
-3. **The KV cache is not always a win.** It is 2.2–23× faster than recomputation on CPU, but slower on MPS for single short prompts (0.87×) and gives no benefit once generation passes the context window.
+3. **The KV cache is not always a win.** It is 2.2–23× faster than recomputation on CPU, but slower on MPS for single short prompts (0.88×) and gives no benefit once generation passes the context window.
 4. **Published single-seed numbers need seeds.** The original v1 run reproduces bit-for-bit on CPU, but seeds 42/43/44 give held-out perplexity 17.58 / 18.99 / 21.07; the published 17.58 is the best of three.
 5. **Corpus v2 adds a held-out test book.** With non-prose text removed and Faraday's *The Chemical History of a Candle* held out, test perplexity is 15.66 ± 2.58 (MHA) and 15.60 ± 2.63 (SDPA) over three seeds. This is a different protocol from v1; the two must not be compared.
 
@@ -78,7 +78,7 @@ python scripts/benchmark_training_step.py --device cpu    # also --device mps
 python scripts/build_experiment_report.py                 # regenerate tables and figures from records
 ```
 
-Checkpoints are not committed (`artifacts/` is ignored). Each training record stores the exact command, seed, data hashes and the checkpoint's SHA-256, so a checkpoint can be regenerated and checked. Bitwise equality is only expected on the same device type and library versions; elsewhere, compare numbers within the tolerances listed in [the release checklist](docs/RELEASE_CHECKLIST.md).
+Checkpoints are not committed (`artifacts/` is ignored). Each training record stores the exact command, seed, data hashes and the checkpoint file's SHA-256. A regenerated checkpoint file does **not** reproduce that file hash, because checkpoints embed elapsed seconds. Check a regenerated model with its deterministic model identity instead (`minilm_lab.identity`, scheme `minilm-model-identity/v1`), which new records store and [identity attestations](experiments/records/identity/) provide for historical runs. Example: the retrained v1 seed-42 checkpoint has a different file hash but the same model identity. Equality is only expected on the same device type and library versions; elsewhere, compare numbers within the tolerances listed in [the release checklist](docs/RELEASE_CHECKLIST.md). Record rules: [docs/RECORD_SCHEMA.md](docs/RECORD_SCHEMA.md).
 
 The committed v1 corpus is authoritative. `python scripts/prepare_science_corpus.py --output-dir /tmp/v1` regenerates it from Project Gutenberg and refuses to write unless every split matches the published hashes. As of October 2026 it does, although the Darwin file's header has changed upstream.
 

@@ -18,7 +18,8 @@ Hardware: Apple M4 (16 GB), CPU and MPS, torch 2.14.1. CUDA was not available.
   is the best of three. Every seed sits near 3.27 nats until roughly step 750.
 - **Attention implementations.** The legacy `nn.MultiheadAttention` path (`mha`), PyTorch
   SDPA and an explicit reference compute the same function (identical fp32 perplexity,
-  100% top-1 agreement with a float64 oracle, gradients verified with `gradcheck`).
+  100% top-1 agreement with a float64 reference run whose RMSNorm variance and RoPE
+  angles are still computed in float32; gradients verified with `gradcheck`).
   At inference SDPA is up to 3.9× (CPU) and 5.4× (MPS) faster than the reference at
   2,048 tokens and needs 8–22× less memory.
 - **Matched training, legacy MHA vs SDPA (3 seeds).** Validation perplexity
@@ -29,7 +30,13 @@ Hardware: Apple M4 (16 GB), CPU and MPS, torch 2.14.1. CUDA was not available.
   recomputation on MPS for batch-1 prompts under 128 tokens, and no faster once
   generation passes the context window (the cache is rebuilt every step).
 - The September CPU-only cache speedup (3.58×) and INT8 numbers below are retained
-  unchanged; the INT8 measurement was not repeated.
+  unchanged. In October both were re-run with the legacy `mha` backend
+  (`experiments/records/legacy/`): the INT8 validation losses and stored byte counts
+  reproduce exactly, while timings differ (cache speedup 3.40× vs 3.58×; INT8 32-pass
+  latency 55.3/65.7 ms vs 55.6/65.9 ms), so the timings are measurements, not constants.
+- **Corpus regeneration.** Project Gutenberg changed the Darwin file's header after
+  September; `prepare_science_corpus.py` now verifies the regenerated v1 splits against
+  the published hashes (byte-identical as of October 22) instead of the raw-file hash.
 
 ### Protocol science-v2
 

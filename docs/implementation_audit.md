@@ -13,7 +13,7 @@ or record that verifies it. Baseline before any change: 16/16 tests passed, ruff
 | Attention tensor shapes | `test_cached_backends_match_full_forward_in_chunks`, `test_cache_grows_by_one_position_per_decoded_token`: cache is `(batch, heads, positions, head_width)` |
 | Causal masking | `test_future_tokens_do_not_change_past_logits`: perturbing tokens ≥ t leaves logits < t unchanged, for all three backends × learned/RoPE |
 | Cache mask alignment | `test_causal_mask_is_bottom_right_aligned`; chunked prefill (1, 8, 1, 22 tokens) matches the full forward |
-| All backends compute the same function | `test_backends_match_float64_oracle` (< 1e-4 max logit error); trained checkpoints: identical perplexity to 4 decimals in fp32 on CPU and MPS |
+| All backends compute the same function | `test_backends_match_float64_oracle` (< 1e-4 max logit error); trained checkpoints: identical perplexity to 4 decimals in fp32 on CPU and MPS **Update (release audit):** the float64 oracle still computes RMSNorm variance and RoPE angles in float32. |
 | RoPE correctness | matches complex-number rotation exactly; scores depend only on m − n; norm preserved |
 | KV cache equivalence | cached and uncached greedy decoding are token-identical for single-token prompts, prompts at the context limit, batch 4, and 40 tokens past the window (sliding refresh) |
 | Batch independence | each row of a batched cached decode equals decoding that row alone |
@@ -45,11 +45,29 @@ or record that verifies it. Baseline before any change: 16/16 tests passed, ruff
 
 ## Unverified assumptions
 
-- Upstream Gutenberg sources were not re-downloaded. The local split files match the manifest hashes, but the raw-source hashes were not re-checked.
+- Upstream Gutenberg sources were not re-downloaded. The local split files match the manifest hashes, but the raw-source hashes were not re-checked. **Update:** re-downloaded on 2026-10-22; the Darwin raw hash changed, but both v1 splits regenerate byte-identically.
 - MPS training determinism and resume on MPS (the RNG state saved is CPU-only; batch sampling uses the CPU RNG, dropout would use the device RNG).
-- The BPE tokenizer path through training/evaluation, LoRA integration into the model, and the published INT8 numbers were not re-measured in this pass.
+- The BPE tokenizer path through training/evaluation, LoRA integration into the model, and the published INT8 numbers were not re-measured in this pass. **Update:** the INT8 losses and stored bytes were re-verified exactly in October (`experiments/records/legacy/`); BPE and LoRA remain unverified.
 - CUDA code paths (`synchronize`, `max_memory_allocated`) are untested: no CUDA hardware.
 - Benchmark timings assume a quiet machine. Thermal state and background load were not controlled beyond warmups, rotated backend order and repeat statistics.
+
+## Independent release audit · resolution (October 2026)
+
+An independent audit of `c256f20` raised four medium-severity findings. Each was
+reproduced before fixing; regression tests cover every reproduction.
+
+| Finding | Reproduction on `c256f20` | Resolution |
+| --- | --- | --- |
+| 1. Checkpoint file hashes are not reproducible | v1 seed 42 retrained in a fresh clone: identical tensors, config and losses; different file SHA-256 (elapsed/train/eval seconds in metadata) | Deterministic model identity `minilm-model-identity/v1` (`src/minilm_lab/identity.py`), stored in new checkpoints and schema-v2 records; file SHA-256 kept as artifact identity; 24 historical checkpoints attested after verifying their file hashes. The regenerated seed-42 file has a different hash and the same identity |
+| 2. Legacy `auto` and `mha` could double-count a seed | an `mha` re-record of seed 42 made the v1 MHA aggregate use seeds [42, 42, 43, 44] | Experiment identity (protocol, canonical backend, seed, config digest, dataset digest) computed after canonicalization; replicates with identical outcomes count once; conflicting identities fail validation and reporting unless explicitly superseded |
+| 3. Evaluation provenance was not validated | zeroed checkpoint hashes, rows swapped across seeds, a changed protocol and duplicate records all passed validation; the report joined on seed/backend | Evaluation, quality and legacy rows must resolve to exactly one experiment identity by checkpoint SHA-256 with matching seed, backend, protocol, selected step, corpus hash and model identity; splits must match files and protocol manifests; training commit and manifest references must exist. The report builder uses the same join and fails closed |
+| 4. KV-cache records lacked raw samples | records kept only summaries (`count: 5`) | Raw per-repeat, per-step seconds persisted; summaries derived from them and re-checked by the validator; three historical KV records superseded (not edited) by same-settings re-measurements |
+
+Additional corrections: the float64 oracle claim is qualified (RMSNorm variance and
+RoPE angles run in float32); CUDA peak memory now uses the device allocator, never host
+RSS (`provenance.measure_peak_memory`); stale INT8 and corpus-regeneration statements are
+annotated above; validator failures propagate as exit status 1, including through
+`pipefail` pipelines. Rules: [RECORD_SCHEMA.md](RECORD_SCHEMA.md).
 
 ## Addendum · SDPA training and corpus v2 (October 2026)
 
@@ -57,7 +75,7 @@ or record that verifies it. Baseline before any change: 16/16 tests passed, ruff
 | --- | --- | --- |
 | `reference_causal_attention` downcast float64 scores to float32 (`.float()`) | `torch.autograd.gradcheck` failed for the reference backend only | Promote to at least float32, never below the input dtype; float64 reference now equals SDPA to 1e-12. The quality record that used the float64 "oracle" is superseded; re-running with the corrected oracle changed fp32 logit errors by < 1e-6 (e.g. 3.65e-5 → 3.60e-5) and no conclusion |
 | SDPA and reference paths skipped attention dropout in training | code inspection | Apply `nn.MultiheadAttention`'s dropout probability in training mode; inert at the published `dropout=0` |
-| Upstream Darwin file changed (`ededa9c0…` → `362142cb…`) | fresh download | The extracted v1 split regenerates byte-identically from the new file; only the Gutenberg header/licence changed. `prepare_science_corpus.py` (v1) still pins the old raw hash and therefore refuses to run; it is left unchanged as a legacy script. v2 pins the hash of the extracted body instead |
+| Upstream Darwin file changed (`ededa9c0…` → `362142cb…`) | fresh download | The extracted v1 split regenerates byte-identically from the new file; only the Gutenberg header/licence changed. `prepare_science_corpus.py` (v1) still pins the old raw hash and therefore refuses to run; it is left unchanged as a legacy script. v2 pins the hash of the extracted body instead **Update:** the v1 script now verifies regenerated split hashes and runs again. |
 | One training record was written while unrelated documentation edits were uncommitted | record `git.dirty = true` | Re-recorded from a clean tree; the dirty record is kept and marked superseded |
 
 **Release note.** From the first release the default backend is `sdpa`. The path called
@@ -67,7 +85,7 @@ accepted as a legacy alias and checkpoints without a backend field are treated a
 Verified after the changes:
 
 - Default-backend (`auto`) training on v1 is bitwise identical to the original runs for seeds 42, 43 and 44.
-- Per-backend gradients agree with a float64 oracle to a relative 1e-4 for learned and RoPE models; `gradcheck` passes for the attention layer under every backend.
+- Per-backend gradients agree with a float64 oracle to a relative 1e-4 for learned and RoPE models; `gradcheck` passes for the attention layer under every backend. (The oracle's RMSNorm variance and RoPE angles run in float32.)
 - Training resumes refuse a backend change; checkpoints record the backend.
 - v2 corpus: body hashes verified on a fresh download; zero exact and near duplicates across train/validation/test; legacy v1 files still match their original manifest (all enforced by `tests/test_corpus_data.py`).
 
