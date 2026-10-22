@@ -25,7 +25,8 @@ from torch.utils._python_dispatch import TorchDispatchMode
 
 from minilm_lab.kv_cache import greedy_decode
 from minilm_lab.model import MiniLM, MiniLMConfig
-from minilm_lab.provenance import environment, summarize, synchronize, write_record
+from minilm_lab.provenance import environment, synchronize, write_record
+from minilm_lab.records import kv_summary_from_raw
 
 ROOT = Path(__file__).resolve().parents[1]
 DTYPES = {"float32": torch.float32, "float16": torch.float16, "bfloat16": torch.bfloat16}
@@ -94,17 +95,10 @@ def run_modes(args, model: MiniLM, prompt: torch.Tensor, new_tokens: int) -> dic
     batch = prompt.size(0)
     result = {"token_identical_to_cached": {mode: bool(torch.equal(outputs[mode], outputs["cached"])) for mode in MODES}}
     for mode, runs in samples.items():
-        totals = [sum(run["step_seconds"]) for run in runs]
-        result[mode] = {
-            "first_token_ms": summarize([1000 * run["step_seconds"][0] for run in runs]),
-            "decode_ms_per_step": summarize([1000 * t for run in runs for t in run["step_seconds"][1:]]),
-            "total_ms": summarize([1000 * t for t in totals]),
-            "tokens_per_second": summarize([batch * new_tokens / t for t in totals]),
-            "median_step_ms_by_index": [
-                1000 * sorted(run["step_seconds"][i] for run in runs)[len(runs) // 2] for i in range(new_tokens)
-            ],
-            "refreshed_steps": runs[0]["refreshed"],
-        }
+        # Raw per-repeat, per-step timings are kept; every summary is derived from them.
+        raw = {"unit": "seconds", "step_seconds": [run["step_seconds"] for run in runs],
+               "refreshed_steps_per_repeat": [run["refreshed"] for run in runs]}
+        result[mode] = {**kv_summary_from_raw(raw, batch, new_tokens), "refreshed_steps": runs[0]["refreshed"], "raw": raw}
     result["speedup_cached_vs_uncached_sdpa"] = result["uncached_sdpa"]["total_ms"]["median"] / result["cached"]["total_ms"]["median"]
     result["speedup_cached_vs_uncached_mha"] = result["uncached_mha"]["total_ms"]["median"] / result["cached"]["total_ms"]["median"]
     return result
@@ -207,6 +201,9 @@ def main() -> None:
             "grid_model_config": model.config.__dict__,
             "window_model_config": window_model.config.__dict__,
             "decoding": "greedy argmax; step 0 is the prompt prefill",
+            "timer": "time.perf_counter",
+            "synchronization": "device synchronize before and after every step (no-op on CPU); backend/mode order rotated each repeat",
+            "units": {"raw": "seconds per step, one list per measured repeat", "summaries": "milliseconds (ms fields) or tokens/second"},
         },
         "results": {"grid": grid, "window": window, "memory": memory},
     }
