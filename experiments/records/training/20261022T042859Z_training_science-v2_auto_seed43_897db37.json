@@ -1,0 +1,129 @@
+{
+  "record_version": 1,
+  "created_utc": "20261022T042859Z",
+  "experiment": "training",
+  "environment": {
+    "python": "3.12.14",
+    "torch": "2.14.1",
+    "numpy": "2.5.4",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "processor": "Apple M4",
+    "memory_bytes": 17179869184,
+    "cpu_count": 10,
+    "torch_threads": 4,
+    "device": "cpu",
+    "mps_available": true,
+    "cuda_available": false,
+    "git": {
+      "commit": "897db37958b0c7595f097a26eaa60549b0f8831e",
+      "branch": "experiments/sdpa-training-v2",
+      "dirty": false
+    },
+    "command": "python scripts/record_training_run.py artifacts/runs/v2/auto-s43 --protocol science-v2 --code-commit 897db37 --train-text data/science-v2/train.txt --validation-text data/science-v2/validation.txt --manifest data/science-v2/manifest.json --training-command 'python scripts/train_tiny.py data/science-v2/train.txt --validation-text data/science-v2/validation.txt --steps 1000 --eval-interval 250 --gradient-accumulation-steps 4 --device cpu --seed 43 --attention-backend auto --output-dir artifacts/runs/v2/auto-s43' --note 'science-v2 protocol'"
+  },
+  "settings": {
+    "dtype": "float32",
+    "seed": 43,
+    "protocol": "science-v2",
+    "attention_backend": "auto",
+    "model_config": {
+      "vocab_size": 256,
+      "context_length": 128,
+      "embedding_dim": 192,
+      "num_layers": 4,
+      "num_heads": 6,
+      "dropout": 0.0,
+      "positional_encoding": "learned",
+      "norm": "rmsnorm",
+      "activation": "swiglu",
+      "rope_theta": 10000.0
+    },
+    "tokenizer": "byte",
+    "optimizer": "AdamW lr=3e-4 (scripts/train_tiny.py defaults)",
+    "steps": 1000,
+    "training_command": "python scripts/train_tiny.py data/science-v2/train.txt --validation-text data/science-v2/validation.txt --steps 1000 --eval-interval 250 --gradient-accumulation-steps 4 --device cpu --seed 43 --attention-backend auto --output-dir artifacts/runs/v2/auto-s43",
+    "training_code_commit": "897db37",
+    "note": "science-v2 protocol",
+    "data": {
+      "train": {
+        "path": "data/science-v2/train.txt",
+        "sha256": "65182db3ac268ec990f79a32fd9151c0de332fb8c411138af9ef965c9f80265e"
+      },
+      "validation": {
+        "path": "data/science-v2/validation.txt",
+        "sha256": "6457fe8eaf9011ef75600da24ed0925cfb5e9464fa1c9e453785eecfc9592b17"
+      },
+      "corpus_sha256_in_checkpoint": "84e98dc220b5b274380238ca9c7b45094b7b62f42ca486e70e65d8ac51449988",
+      "manifest_path": "data/science-v2/manifest.json",
+      "manifest_sha256": "9a34a5fca7532fccbe7d6be0e59a99523ebf7796cab09cb3ebd66ab1f26025c0"
+    }
+  },
+  "results": {
+    "metrics": [
+      {
+        "step": 250,
+        "train_loss": 3.042278289794922,
+        "validation_loss": 3.0388119267553173,
+        "perplexity": 20.88042102315425,
+        "bits_per_token": 4.384078896924132,
+        "validation_tokens": 105665,
+        "elapsed_seconds": 35.84622049999598,
+        "train_seconds": 34.0019872058474,
+        "eval_seconds": 1.8437756249913946
+      },
+      {
+        "step": 500,
+        "train_loss": 3.043114483356476,
+        "validation_loss": 3.0366123332859063,
+        "perplexity": 20.83454306036411,
+        "bits_per_token": 4.380905554333841,
+        "validation_tokens": 105665,
+        "elapsed_seconds": 71.57403299999714,
+        "train_seconds": 67.89995957478823,
+        "eval_seconds": 1.823977208987344
+      },
+      {
+        "step": 750,
+        "train_loss": 3.017816126346588,
+        "validation_loss": 3.0346339543510057,
+        "perplexity": 20.793365185406195,
+        "bits_per_token": 4.378051356855461,
+        "validation_tokens": 105665,
+        "elapsed_seconds": 109.29384654099704,
+        "train_seconds": 103.68952695182816,
+        "eval_seconds": 1.9238174159982009
+      },
+      {
+        "step": 1000,
+        "train_loss": 2.9055304527282715,
+        "validation_loss": 2.9176224386664407,
+        "perplexity": 18.49725677517611,
+        "bits_per_token": 4.209239423450438,
+        "validation_tokens": 105665,
+        "elapsed_seconds": 146.84813966599177,
+        "train_seconds": 139.30257590580732,
+        "eval_seconds": 1.9362271669961046
+      }
+    ],
+    "best_step": 1000,
+    "best_validation_loss": 2.9176224386664407,
+    "best_checkpoint_sha256": "ad66af927334d8991901682c91a0c1ca539707681a0ba890d7145101ba3c041c",
+    "final_checkpoint_sha256": "46117ebc02af5b2fe2a5cf6b6301435955f8a865aeef7f30a992e5c33694543c",
+    "run_summary": {
+      "attention_backend": "auto",
+      "device": "cpu",
+      "steps": 1000,
+      "train_seconds": 139.30257590580732,
+      "train_tokens": 4096000,
+      "train_tokens_per_second": 29403.61995006902,
+      "eval_seconds": [
+        1.8437756249913946,
+        1.823977208987344,
+        1.9238174159982009,
+        1.9362271669961046
+      ],
+      "process_peak_rss_bytes": 468566016
+    }
+  }
+}
