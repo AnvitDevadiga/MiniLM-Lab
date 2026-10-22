@@ -48,7 +48,7 @@ def windows(tokens: torch.Tensor, context: int) -> tuple[torch.Tensor, torch.Ten
 
 @torch.inference_mode()
 def logits_for(model: MiniLM, inputs: torch.Tensor, device: str, batch_size: int = 64) -> torch.Tensor:
-    return torch.cat([model(inputs[i : i + batch_size].to(device))[0].double().cpu() for i in range(0, len(inputs), batch_size)])
+    return torch.cat([model(inputs[i : i + batch_size].to(device))[0].cpu().double() for i in range(0, len(inputs), batch_size)])
 
 
 def main() -> None:
