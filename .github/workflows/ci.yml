@@ -18,7 +18,10 @@ jobs:
           python-version: "3.12"
       - name: Install project
         run: python -m pip install -r requirements/release-lock.txt && python -m pip install -e . --no-deps
-      - name: Lint
-        run: ruff check .
-      - name: Test
-        run: pytest -q
+      - name: Hardware report
+        # Hosted macOS arm64 runners report MPS as available but cannot allocate on it;
+        # MPS tests are then skipped with this reason (run them on Apple Silicon with
+        # MINILM_REQUIRE_MPS=1). CPU correctness tests always run.
+        run: python tests/hardware.py
+      - name: Release verification (lint, tests, strict record validation, report drift)
+        run: ./scripts/verify_release.sh

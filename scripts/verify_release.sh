@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 PY=${PYTHON:-python}
 step() { echo "== $*"; }
 step "lint";                "$PY" -m ruff check .
-step "tests";               "$PY" -m pytest -q
+step "tests";               "$PY" -m pytest -q -rs  # -rs prints every skip reason (hardware, artifacts)
 # --strict: model identities must be verified from checkpoint artifacts or the pinned
 # audited baseline; metadata-only consistency fails the release.
 step "record validation";   "$PY" scripts/validate_records.py --strict | tail -n 2

@@ -73,14 +73,16 @@ def test_state_dict_is_identical_across_backends() -> None:
         assert all(torch.equal(state[key], reference[key]) for key in state)
 
 
+@pytest.mark.parametrize("device", ["cpu", "mps"])
 @pytest.mark.parametrize("positional_encoding", ["learned", "rope"])
-def test_backend_specific_tolerances(positional_encoding: str) -> None:
+def test_backend_specific_tolerances(positional_encoding: str, device: str, request: pytest.FixtureRequest) -> None:
+    if device == "mps":
+        request.getfixturevalue("mps_device")  # skipped with a reason, or failed under MINILM_REQUIRE_MPS=1
     tokens = torch.randint(0, 64, (2, 32), generator=torch.Generator().manual_seed(4))
     base = model(positional_encoding)
     oracle = base.double().set_attention_backend("reference")(tokens)[0]
-    devices = ["cpu"] + (["mps"] if torch.backends.mps.is_available() else [])
-    for (device, dtype, backend), tolerance in TOLERANCES.items():
-        if device not in devices:
+    for (target, dtype, backend), tolerance in TOLERANCES.items():
+        if target != device:
             continue
         candidate = model(positional_encoding).to(device=device, dtype=dtype).set_attention_backend(backend)
         error = (candidate(tokens.to(device))[0].cpu().double() - oracle).abs().max().item()
