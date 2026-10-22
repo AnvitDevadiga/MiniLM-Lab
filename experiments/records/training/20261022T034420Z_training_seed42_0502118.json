@@ -1,0 +1,127 @@
+{
+  "record_version": 1,
+  "created_utc": "20261022T034420Z",
+  "experiment": "training",
+  "environment": {
+    "python": "3.12.14",
+    "torch": "2.14.1",
+    "numpy": "2.5.4",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "processor": "Apple M4",
+    "memory_bytes": 17179869184,
+    "cpu_count": 10,
+    "torch_threads": 4,
+    "device": "cpu",
+    "mps_available": true,
+    "cuda_available": false,
+    "git": {
+      "commit": "0502118a1a0af31c8480f6b499d9347916330a79",
+      "branch": "experiments/attention-kv-audit",
+      "dirty": true
+    },
+    "command": "python scripts/record_training_run.py artifacts/runs/science-v2-s42 --code-commit 1fb8f37 --note 'Trained at commit 1fb8f37 (CPU, float32).' --training-command 'python scripts/train_tiny.py data/science/train.txt --validation-text data/science/validation.txt --steps 1000 --eval-interval 250 --gradient-accumulation-steps 4 --device cpu --seed 42 --output-dir artifacts/runs/science-v2-s42'"
+  },
+  "settings": {
+    "dtype": "float32",
+    "seed": 42,
+    "model_config": {
+      "vocab_size": 256,
+      "context_length": 128,
+      "embedding_dim": 192,
+      "num_layers": 4,
+      "num_heads": 6,
+      "dropout": 0.0,
+      "positional_encoding": "learned",
+      "norm": "rmsnorm",
+      "activation": "swiglu",
+      "rope_theta": 10000.0
+    },
+    "tokenizer": "byte",
+    "optimizer": "AdamW lr=3e-4 (scripts/train_tiny.py defaults)",
+    "steps": 1000,
+    "training_command": "python scripts/train_tiny.py data/science/train.txt --validation-text data/science/validation.txt --steps 1000 --eval-interval 250 --gradient-accumulation-steps 4 --device cpu --seed 42 --output-dir artifacts/runs/science-v2-s42",
+    "training_code_commit": "1fb8f37",
+    "note": "Trained at commit 1fb8f37 (CPU, float32).",
+    "data": {
+      "train": {
+        "path": "data/science/train.txt",
+        "sha256": "19c057053f222c3084fba3693c1c295ea94f6cda1ee5fbf5f917953fcb91ef00"
+      },
+      "validation": {
+        "path": "data/science/validation.txt",
+        "sha256": "e25d4e45706bbf4251129dbb079f3487660c453cf8b34407901350538b23e2e7"
+      },
+      "corpus_sha256_in_checkpoint": "f6642de41672b3cac70017cd5f02312975c0bedfa32be8e79056cf36a48e943f",
+      "manifest": {
+        "split_method": "first approximately 90% of bytes at a paragraph boundary from each document for training; remainder for validation",
+        "sources": [
+          {
+            "name": "darwin-1859",
+            "url": "https://www.gutenberg.org/cache/epub/1228/pg1228.txt",
+            "raw_sha256": "ededa9c0bf8761efed092c303b46c1c92de956838cba6249a33bedfd6d7363b4",
+            "paragraphs": 1322,
+            "train_paragraphs": 701,
+            "validation_bytes": 93406
+          },
+          {
+            "name": "einstein-1924",
+            "url": "https://www.gutenberg.org/cache/epub/30155/pg30155.txt",
+            "raw_sha256": "86ed8156239455cbb6ed33e06097707d3ab7c40d46e9aa5ff32d3c3f94ef68fd",
+            "paragraphs": 564,
+            "train_paragraphs": 490,
+            "validation_bytes": 18704
+          }
+        ],
+        "train_bytes": 1008977,
+        "validation_bytes": 112112,
+        "train_sha256": "19c057053f222c3084fba3693c1c295ea94f6cda1ee5fbf5f917953fcb91ef00",
+        "validation_sha256": "e25d4e45706bbf4251129dbb079f3487660c453cf8b34407901350538b23e2e7"
+      }
+    }
+  },
+  "results": {
+    "metrics": [
+      {
+        "step": 250,
+        "train_loss": 3.0327484011650085,
+        "validation_loss": 3.275113352777709,
+        "perplexity": 26.446223063511567,
+        "bits_per_token": 4.724989792401627,
+        "validation_tokens": 112111,
+        "elapsed_seconds": 27.38209637500404
+      },
+      {
+        "step": 500,
+        "train_loss": 3.0437499284744263,
+        "validation_loss": 3.279687989213292,
+        "perplexity": 26.567482065577426,
+        "bits_per_token": 4.731589597701113,
+        "validation_tokens": 112111,
+        "elapsed_seconds": 55.14372462499887
+      },
+      {
+        "step": 750,
+        "train_loss": 3.058131754398346,
+        "validation_loss": 3.273437816850808,
+        "perplexity": 26.401948568749216,
+        "bits_per_token": 4.7225725050290555,
+        "validation_tokens": 112111,
+        "elapsed_seconds": 83.4805836250016
+      },
+      {
+        "step": 1000,
+        "train_loss": 2.6655086278915405,
+        "validation_loss": 2.866917291863034,
+        "perplexity": 17.582732137354572,
+        "bits_per_token": 4.136087359609617,
+        "validation_tokens": 112111,
+        "elapsed_seconds": 114.25916233300813
+      }
+    ],
+    "best_step": 1000,
+    "best_validation_loss": 2.866917291863034,
+    "best_checkpoint_sha256": "657c3c616443474aa04c407c870c50a653446522eda677b15064a8639772501d",
+    "final_checkpoint_sha256": "ee6c3d2164c964195399797351c2cff2c301a9f1f948dcc126fefcc89cca9251"
+  }
+}

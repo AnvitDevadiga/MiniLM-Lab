@@ -20,6 +20,8 @@ INK, MUTED = "#f4f7fb", "#a9b8c9"
 # Validated categorical slots 1-3 (dark steps) against the panel surface.
 SERIES = ("#3987e5", "#d95926", "#199e70")
 BACKEND_LABEL = {"auto": "MHA (default)", "sdpa": "SDPA", "reference": "Reference"}
+# Drawn dashed (and last) so a series that coincides with another stays visible.
+DASHED = {"MHA (default)"}
 TARGET_ORDER = ("cpu/float32", "mps/float32", "mps/float16", "mps/bfloat16")
 
 
@@ -178,7 +180,7 @@ def log_panel(x0: float, y0: float, w: float, h: float, heading: str, series: li
     ticks = []
     exponent = math.floor(y_low)
     while exponent <= y_high:
-        for mantissa in (1, 2, 5):
+        for mantissa in (1, 2, 3, 5) if y_high - y_low <= 1 else (1, 2, 5):
             value = mantissa * 10**exponent
             if y_low <= math.log10(value) <= y_high:
                 ticks.append(value)
@@ -193,9 +195,10 @@ def log_panel(x0: float, y0: float, w: float, h: float, heading: str, series: li
         body += f'<text x="{px(x):.1f}" y="{bottom + 18}" text-anchor="middle" class="axis">{x}</text>'
     body += f'<text x="{(left + right) / 2:.1f}" y="{y0 + h - 4}" text-anchor="middle" class="small">sequence length (tokens)</text>'
     body += f'<text transform="translate({x0 + 14},{(top + bottom) / 2:.1f}) rotate(-90)" text-anchor="middle" class="small">{html.escape(y_label)}</text>'
-    for _, color, pts in series:
+    for label, color, pts in series:
         coords = " ".join(f"{px(x):.1f},{py(y):.1f}" for x, y, _ in pts)
-        body += f'<polyline points="{coords}" fill="none" stroke="{color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
+        dash = ' stroke-dasharray="6 5"' if label in DASHED else ""
+        body += f'<polyline points="{coords}" fill="none" stroke="{color}" stroke-width="2"{dash} stroke-linejoin="round" stroke-linecap="round"/>'
         for x, y, tip in pts:
             body += f'<circle cx="{px(x):.1f}" cy="{py(y):.1f}" r="4.5" fill="{color}" stroke="{PANEL}" stroke-width="2"><title>{html.escape(tip)}</title></circle>'
     return body
@@ -204,8 +207,9 @@ def log_panel(x0: float, y0: float, w: float, h: float, heading: str, series: li
 def legend(x: float, y: float, entries: list[tuple[str, str]]) -> str:
     body = ""
     for label, color in entries:
-        body += f'<line x1="{x}" x2="{x + 22}" y1="{y - 4}" y2="{y - 4}" stroke="{color}" stroke-width="2"/><circle cx="{x + 11}" cy="{y - 4}" r="4.5" fill="{color}"/><text x="{x + 30}" y="{y}" class="axis">{html.escape(label)}</text>'
-        x += 40 + 7.2 * len(label)
+        dash = ' stroke-dasharray="6 5"' if label in DASHED else ""
+        body += f'<line x1="{x}" x2="{x + 22}" y1="{y - 4}" y2="{y - 4}" stroke="{color}" stroke-width="2"{dash}/><circle cx="{x + 11}" cy="{y - 4}" r="4.5" fill="{color}"/><text x="{x + 30}" y="{y}" class="axis">{html.escape(label)}</text>'
+        x += 56 + 7.2 * len(label)
     return body
 
 
@@ -241,7 +245,7 @@ def figures(records: dict[str, dict]) -> list[tuple[str, str]]:
         ratio_panels.append((key, ratio_series, "reference ÷ SDPA forward time", lambda v: f"{v:g}×", 1.0))
         big = max(batches)
         memory_series = []
-        for color, backend in zip(SERIES, ("auto", "sdpa", "reference")):
+        for color, backend in sorted(zip(SERIES, ("auto", "sdpa", "reference")), key=lambda item: item[1] == "auto"):
             pts = [
                 (length, rows[(backend, big, length)]["memory"]["peak_extra_bytes"] / 2**20,
                  f"{key} {BACKEND_LABEL[backend]} B={big} L={length}: {rows[(backend, big, length)]['memory']['peak_extra_bytes'] / 2**20:.1f} MiB")
@@ -271,7 +275,7 @@ def figures(records: dict[str, dict]) -> list[tuple[str, str]]:
         grid_figure(
             "attention_memory.svg", "EXPERIMENT 02 / MEMORY", "Explicit attention pays for the full score matrix.",
             "Peak extra memory during one forward pass, fresh process per point. Log scales on both axes.",
-            "CPU: process peak-RSS delta. MPS: allocator pool growth (approximate high-water mark). Zero deltas are omitted.",
+            "CPU: process peak-RSS delta. MPS: live allocator bytes sampled after every op. Dashed MHA coincides with SDPA on MPS.",
             memory_panels, backends,
         ),
         grid_figure(
@@ -284,10 +288,10 @@ def figures(records: dict[str, dict]) -> list[tuple[str, str]]:
 
 
 def replace_section(text: str, name: str, content: str) -> str:
-    pattern = re.compile(rf"(<!-- BEGIN GENERATED:{name} -->\n).*?(\n<!-- END GENERATED:{name} -->)", re.DOTALL)
+    pattern = re.compile(rf"(<!-- BEGIN GENERATED:{name} -->\n).*?(<!-- END GENERATED:{name} -->)", re.DOTALL)
     if not pattern.search(text):
         raise ValueError(f"missing generated section markers for {name}")
-    return pattern.sub(lambda m: m.group(1) + content + m.group(2), text)
+    return pattern.sub(lambda m: m.group(1) + content + "\n" + m.group(2), text)
 
 
 def main() -> None:
