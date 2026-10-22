@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -106,3 +107,21 @@ def test_resume_reproduces_uninterrupted_training(tmp_path: Path) -> None:
     resumed_by_step = {m["step"]: m["validation_loss"] for m in resumed["metrics"]}
     assert sorted(resumed_by_step) == [2, 3, 4, 6]
     assert all(resumed_by_step[m["step"]] == m["validation_loss"] for m in straight["metrics"])
+
+
+def test_training_records_backend_and_rejects_backend_change_on_resume(tmp_path: Path) -> None:
+    text = tmp_path / "corpus.txt"
+    text.write_text("Natural selection acts slowly on small variations. " * 40, encoding="utf-8")
+    output = tmp_path / "sdpa"
+    command = [
+        sys.executable, str(ROOT / "scripts/train_tiny.py"), str(text), "--steps", "2", "--context-length", "16",
+        "--embedding-dim", "16", "--num-layers", "1", "--num-heads", "2", "--batch-size", "2", "--eval-interval", "2",
+        "--device", "cpu", "--output-dir", str(output),
+    ]
+    subprocess.run(command + ["--attention-backend", "sdpa"], check=True, capture_output=True, cwd=ROOT)
+    checkpoint = torch.load(output / "tiny_checkpoint.pt", weights_only=True)
+    assert checkpoint["attention_backend"] == "sdpa"
+    summary = json.loads((output / "run_summary.json").read_text())
+    assert summary["attention_backend"] == "sdpa" and summary["train_tokens"] == 2 * 2 * 16
+    resumed = subprocess.run(command + ["--resume"], check=False, capture_output=True, text=True, cwd=ROOT)
+    assert resumed.returncode != 0 and "attention backend" in resumed.stderr

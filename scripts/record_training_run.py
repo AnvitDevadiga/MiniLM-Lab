@@ -18,10 +18,13 @@ def main() -> None:
     parser.add_argument("--validation-text", type=Path, default=ROOT / "data/science/validation.txt")
     parser.add_argument("--training-command", required=True, help="the exact command that produced the run")
     parser.add_argument("--code-commit", required=True, help="commit whose training code produced the run")
+    parser.add_argument("--manifest", type=Path, default=ROOT / "data/science/manifest.json")
+    parser.add_argument("--protocol", default="science-v1")
     parser.add_argument("--note", default="")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "experiments/records/training")
     args = parser.parse_args()
     final = torch.load(args.run_dir / "tiny_checkpoint.pt", map_location="cpu", weights_only=True)
+    summary = args.run_dir / "run_summary.json"
     best = torch.load(args.run_dir / "best_checkpoint.pt", map_location="cpu", weights_only=True)
     payload = {
         "experiment": "training",
@@ -29,6 +32,8 @@ def main() -> None:
         "settings": {
             "dtype": "float32",
             "seed": final["seed"],
+            "protocol": args.protocol,
+            "attention_backend": final.get("attention_backend", "auto"),
             "model_config": final["config"],
             "tokenizer": final["tokenizer"],
             "optimizer": "AdamW lr=3e-4 (scripts/train_tiny.py defaults)",
@@ -40,7 +45,8 @@ def main() -> None:
                 "train": {"path": str(args.train_text.relative_to(ROOT)), "sha256": file_sha256(args.train_text)},
                 "validation": {"path": str(args.validation_text.relative_to(ROOT)), "sha256": file_sha256(args.validation_text)},
                 "corpus_sha256_in_checkpoint": final["corpus_sha256"],
-                "manifest": json.loads((ROOT / "data/science/manifest.json").read_text(encoding="utf-8")),
+                "manifest_path": str(args.manifest.relative_to(ROOT)),
+                "manifest_sha256": file_sha256(args.manifest),
             },
         },
         "results": {
@@ -49,9 +55,11 @@ def main() -> None:
             "best_validation_loss": best["best_validation_loss"],
             "best_checkpoint_sha256": file_sha256(args.run_dir / "best_checkpoint.pt"),
             "final_checkpoint_sha256": file_sha256(args.run_dir / "tiny_checkpoint.pt"),
+            "run_summary": json.loads(summary.read_text(encoding="utf-8")) if summary.exists() else None,
         },
     }
-    path = write_record(args.output_dir, f"training_seed{final['seed']}", payload)
+    name = f"training_{args.protocol}_{final.get('attention_backend', 'auto')}_seed{final['seed']}"
+    path = write_record(args.output_dir, name, payload)
     print(f"wrote {path}")
 
 
