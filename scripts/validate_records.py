@@ -31,8 +31,10 @@ def main() -> None:
     parser.add_argument("--records-dir", type=Path, default=RECORDS)
     parser.add_argument("--strict", action="store_true")
     parser.add_argument("--require-artifacts", action="store_true")
+    parser.add_argument("--artifact-root", type=Path, default=ROOT, help="where checkpoint artifacts are looked up")
+    parser.add_argument("--no-baseline", action="store_true", help="ignore the pinned audited baseline")
     args = parser.parse_args()
-    store = load_store(ROOT, args.records_dir)
+    store = load_store(ROOT, args.records_dir, artifact_root=args.artifact_root, baseline_path=None if args.no_baseline else True)
     errors = validate_store(store, strict=args.strict, require_artifacts=args.require_artifacts)
     levels = Counter(found.status for found in identity_evidence(store, []).values())
     for error in errors:
