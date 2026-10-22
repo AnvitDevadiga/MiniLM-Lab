@@ -236,14 +236,23 @@ def training_by_checkpoint(store: Store) -> dict[str, list[tuple[str, dict]]]:
 
 def resolve_row(store: Store, where: str, row: dict, protocol: str | None, problems: list[str], index: dict) -> tuple[str, dict] | None:
     matches = index.get(row.get("checkpoint_sha256"), [])
-    if len(matches) != 1:
-        problems.append(f"{where}: checkpoint {str(row.get('checkpoint_sha256'))[:12]} matches {len(matches)} current training records (expected 1)")
+    identities = set()
+    for _, candidate in matches:
+        try:
+            identities.add(training_identity(candidate))
+        except (KeyError, TypeError):
+            identities.add(None)
+    # Several records may describe one checkpoint only as replicates of a single
+    # experiment identity (e.g. a legacy "auto" record and its "mha" re-record).
+    if not matches or len(identities) != 1 or None in identities:
+        problems.append(f"{where}: checkpoint {str(row.get('checkpoint_sha256'))[:12]} matches {len(matches)} current training records "
+                        f"with {len(identities)} experiment identities (expected exactly one)")
         return None
-    key, training = matches[0]
+    key, training = min(matches, key=lambda item: (item[1]["created_utc"], item[0]))
     settings = training["settings"]
     if protocol is not None and settings.get("protocol") != protocol:
         problems.append(f"{where}: protocol {protocol} but training record {key} is {settings.get('protocol')}")
-    if row.get("seed") != settings.get("seed"):
+    if "seed" in row and row["seed"] != settings.get("seed"):
         problems.append(f"{where}: seed {row.get('seed')} but training record {key} has seed {settings.get('seed')}")
     backend = row.get("attention_backend", row.get("backend"))
     if "attention_backend" in row and canonical_backend(backend) != canonical_backend(settings.get("attention_backend")):
@@ -391,8 +400,7 @@ def validate_store(store: Store) -> list[str]:
             resolve_row(store, f"{key} row {position}", row, None, problems, index)
     for key, record in store.current("legacy"):
         settings = record["settings"]
-        if len(index.get(settings.get("checkpoint_sha256"), [])) != 1:
-            problems.append(f"{key}: checkpoint does not match exactly one current training record")
+        resolve_row(store, key, {"checkpoint_sha256": settings.get("checkpoint_sha256")}, None, problems, index)
         if "validation_text" in settings:
             path = relative_data_path(store, settings["validation_text"])
             if store.file_sha256(path) != settings["validation_sha256"]:
