@@ -1,0 +1,148 @@
+{
+  "protocol": "science-v2",
+  "legacy_protocol": "science-v1 in data/science/ (unchanged)",
+  "rules": [
+    "extract the Project Gutenberg body; verify its SHA-256",
+    "keep text from the start marker line (last of the expected occurrences) up to the end marker line",
+    "split paragraphs on blank lines",
+    "drop paragraphs with no lowercase letter (headings, numerals)",
+    "drop paragraphs entirely enclosed in square brackets (illustrations, editorial notes)",
+    "drop paragraphs of two or more lines where at least half of the lines end in a number (index, contents, tables)",
+    "train/validation books: first ~90% of kept bytes at a paragraph boundary to train, rest to validation",
+    "test book: all kept paragraphs; never used for training, checkpoint selection or tuning",
+    "remove held-out paragraphs that are exact (normalized) or near (>=50% word 8-gram) duplicates of training or validation text"
+  ],
+  "usage": {
+    "train": "optimization only",
+    "validation": "checkpoint selection",
+    "test": "final evaluation only, once per selected checkpoint"
+  },
+  "sources": [
+    {
+      "name": "darwin-1859",
+      "title": "On the Origin of Species (1859)",
+      "author": "Charles Darwin",
+      "role": "train_validation",
+      "url": "https://www.gutenberg.org/cache/epub/1228/pg1228.txt",
+      "raw_sha256_observed": "362142cb7c6f90850477520cfe2a62fe423ae92ea8eb6d9cd8b30ddb39de60b9",
+      "body_sha256": "9ff49617f2a0b52b18a2a3b6f09c8a323358160eb98e4e336969b1100768d73f",
+      "start_marker": {
+        "line": "ON THE ORIGIN OF SPECIES.",
+        "occurrences": 1
+      },
+      "end_marker": {
+        "line": "INDEX.",
+        "occurrences": 1
+      },
+      "main_text_paragraphs": 711,
+      "dropped_paragraphs": {
+        "no_lowercase_heading": 15
+      },
+      "kept_paragraphs": 696,
+      "train_paragraphs": 623
+    },
+    {
+      "name": "einstein-1924",
+      "title": "Relativity: The Special and General Theory (Lawson translation)",
+      "author": "Albert Einstein",
+      "role": "train_validation",
+      "url": "https://www.gutenberg.org/cache/epub/30155/pg30155.txt",
+      "raw_sha256_observed": "86ed8156239455cbb6ed33e06097707d3ab7c40d46e9aa5ff32d3c3f94ef68fd",
+      "body_sha256": "384e707c77e521bec3cceee2b2b6a0e88f271e0f27752a3ec3790ba06554a36e",
+      "start_marker": {
+        "line": "PREFACE",
+        "occurrences": 1
+      },
+      "end_marker": {
+        "line": "_K_ = co-ordinate system",
+        "occurrences": 1
+      },
+      "main_text_paragraphs": 542,
+      "dropped_paragraphs": {
+        "no_lowercase_heading": 79
+      },
+      "kept_paragraphs": 463,
+      "train_paragraphs": 404
+    },
+    {
+      "name": "faraday-1861",
+      "title": "The Chemical History of a Candle",
+      "author": "Michael Faraday",
+      "role": "test",
+      "url": "https://www.gutenberg.org/cache/epub/14474/pg14474.txt",
+      "raw_sha256_observed": "ee17c709443e87dd8d36e2f8d7065e54344bc5182e0dc856c08f058fbd9b013f",
+      "body_sha256": "5580d9bfa409ee7f2f7d79b3f27921470a692d6e549a55052adf959547d7ade5",
+      "start_marker": {
+        "line": "THE CHEMICAL HISTORY OF A CANDLE",
+        "occurrences": 1
+      },
+      "end_marker": {
+        "line": "NOTES.",
+        "occurrences": 2
+      },
+      "main_text_paragraphs": 217,
+      "dropped_paragraphs": {
+        "bracketed_editorial": 40,
+        "no_lowercase_heading": 15,
+        "numeric_list_or_table": 2
+      },
+      "kept_paragraphs": 160
+    }
+  ],
+  "files": {
+    "train.txt": {
+      "sha256": "65182db3ac268ec990f79a32fd9151c0de332fb8c411138af9ef965c9f80265e",
+      "bytes": 969506
+    },
+    "validation.txt": {
+      "sha256": "6457fe8eaf9011ef75600da24ed0925cfb5e9464fa1c9e453785eecfc9592b17",
+      "bytes": 105666
+    },
+    "test.txt": {
+      "sha256": "9e98ba26c35173180e6a43cc3b49096bea57f62cb1e8013bf5ac1e0b03d53d6b",
+      "bytes": 211849
+    },
+    "darwin-1859-validation.txt": {
+      "sha256": "dea22adfd1f580ec7f3c6a87011bf250436e49371e38efa44209942a4120d59a",
+      "bytes": 87711
+    },
+    "einstein-1924-validation.txt": {
+      "sha256": "c6728bc6890bc714df5ebbe2030766126ad4f08b57c15b551fb948e4e405f9c8",
+      "bytes": 17953
+    }
+  },
+  "contamination_checks": {
+    "darwin-1859_validation_vs_train": {
+      "paragraphs": 73,
+      "exact_duplicates": 0,
+      "near_duplicates": 0,
+      "ngram_n": 8,
+      "near_threshold": 0.5,
+      "mean_ngram_overlap": 0.006235369217520088
+    },
+    "einstein-1924_validation_vs_train": {
+      "paragraphs": 59,
+      "exact_duplicates": 0,
+      "near_duplicates": 0,
+      "ngram_n": 8,
+      "near_threshold": 0.5,
+      "mean_ngram_overlap": 0.009755296544751041
+    },
+    "test_vs_train": {
+      "paragraphs": 160,
+      "exact_duplicates": 0,
+      "near_duplicates": 0,
+      "ngram_n": 8,
+      "near_threshold": 0.5,
+      "mean_ngram_overlap": 1.812480742392112e-05
+    },
+    "test_vs_validation": {
+      "paragraphs": 160,
+      "exact_duplicates": 0,
+      "near_duplicates": 0,
+      "ngram_n": 8,
+      "near_threshold": 0.5,
+      "mean_ngram_overlap": 1.812480742392112e-05
+    }
+  }
+}
