@@ -30,10 +30,21 @@ DASHED = {"MHA (legacy v1)"}
 TARGET_ORDER = ("cpu/float32", "mps/float32", "mps/float16", "mps/bfloat16")
 
 
+def superseded() -> set[str]:
+    index = RECORDS / "SUPERSEDED.json"
+    return {str(RECORDS / p) for p in json.loads(index.read_text())["records"]} if index.exists() else set()
+
+
+def current_records(directory: Path) -> list[Path]:
+    """Records in time order, excluding superseded ones (which stay on disk)."""
+    skip = superseded()
+    return [path for path in sorted(directory.glob("*.json")) if str(path) not in skip]
+
+
 def latest(directory: Path) -> dict[str, dict]:
     """Latest record per device/dtype; earlier records stay on disk untouched."""
     chosen = {}
-    for path in sorted(directory.glob("*.json")):
+    for path in current_records(directory):
         record = json.loads(path.read_text(encoding="utf-8"))
         record["_path"] = str(path.relative_to(ROOT))
         key = f"{record['environment']['device']}/{record['settings'].get('dtype', 'mixed')}"
@@ -295,7 +306,7 @@ def figures(records: dict[str, dict]) -> list[tuple[str, str]]:
 def latest_by_name(directory: Path) -> dict[str, dict]:
     """Latest record per record name (the part between timestamp and commit)."""
     chosen = {}
-    for path in sorted(directory.glob("*.json")):
+    for path in current_records(directory):
         record = json.loads(path.read_text(encoding="utf-8"))
         record["_path"] = str(path.relative_to(ROOT))
         chosen[path.stem.split("_", 1)[1].rsplit("_", 1)[0]] = record

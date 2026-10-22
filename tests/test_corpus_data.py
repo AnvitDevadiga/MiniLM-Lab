@@ -61,3 +61,9 @@ def test_v2_per_book_validation_files_concatenate_to_validation() -> None:
     parts = [(V2 / f"{s['name']}-validation.txt").read_text() for s in json.loads((V2 / "manifest.json").read_text())["sources"] if s["role"] == "train_validation"]
     # Same joining as v1 and prepare_science_corpus_v2.py.
     assert "\n\n".join(parts).strip() + "\n" == (V2 / "validation.txt").read_text()
+
+
+def test_legacy_v1_per_book_validation_files_concatenate_to_validation() -> None:
+    parts = [(V1 / f"{name}-validation.txt").read_text() for name in ("darwin-1859", "einstein-1924")]
+    # Same joining as scripts/prepare_science_corpus.py.
+    assert "\n\n".join(parts) == (V1 / "validation.txt").read_text()

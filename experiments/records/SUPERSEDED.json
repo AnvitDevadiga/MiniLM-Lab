@@ -1,0 +1,37 @@
+{
+  "policy": "Records are never deleted or edited. A superseded record is kept for history, is not used by docs/EXPERIMENT_RESULTS.md, and names its replacement.",
+  "records": {
+    "attention/20261022T033255Z_attention_mps_float32_615767d.json": {
+      "reason": "MPS memory measured as driver pool size, which moves in ~1 GiB heaps; timing values were valid but the record is replaced as a whole",
+      "superseded_by": "attention/20261022T034036Z_attention_mps_float32_0502118.json"
+    },
+    "attention/20261022T033548Z_attention_mps_float16_615767d.json": {
+      "reason": "MPS memory measured as driver pool size, which moves in ~1 GiB heaps; timing values were valid but the record is replaced as a whole",
+      "superseded_by": "attention/20261022T034304Z_attention_mps_float16_0502118.json"
+    },
+    "attention_quality/20261022T033711Z_attention_quality_615767d.json": {
+      "reason": "written with an uncommitted fix to compare_attention_quality.py (git.dirty = true)",
+      "superseded_by": "attention_quality/20261022T041752Z_attention_quality_48e95f8.json"
+    },
+    "attention_quality/20261022T034349Z_attention_quality_0502118.json": {
+      "reason": "the float64 oracle ran its softmax in float32 (reference_causal_attention downcast); rerun changed fp32 logit errors by < 1e-6 and no conclusion",
+      "superseded_by": "attention_quality/20261022T041752Z_attention_quality_48e95f8.json"
+    },
+    "training/20261022T034420Z_training_seed42_0502118.json": {
+      "reason": "recorded while unrelated documentation edits were uncommitted (git.dirty = true); training ran at commit 1fb8f37",
+      "superseded_by": "training/20261022T041654Z_training_science-v1_auto_seed42_48e95f8.json"
+    },
+    "training/20261022T034421Z_training_seed43_0502118.json": {
+      "reason": "recorded with git.dirty = true; training used 1fb8f37 code plus model.py edits later committed as 274722f. The clean replacement's checkpoint is bitwise identical",
+      "superseded_by": "training/20261022T041103Z_training_science-v1_auto_seed43_48e95f8.json"
+    },
+    "training/20261022T034421Z_training_seed44_0502118.json": {
+      "reason": "recorded with git.dirty = true; training used 1fb8f37 code plus model.py edits later committed as 274722f. The clean replacement's checkpoint is bitwise identical",
+      "superseded_by": "training/20261022T041335Z_training_science-v1_auto_seed44_48e95f8.json"
+    },
+    "training/20261022T040350Z_training_science-v1_auto_seed42_48e95f8.json": {
+      "reason": "recorded while unrelated documentation edits were uncommitted (git.dirty = true)",
+      "superseded_by": "training/20261022T041654Z_training_science-v1_auto_seed42_48e95f8.json"
+    }
+  }
+}
