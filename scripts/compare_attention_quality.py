@@ -115,7 +115,7 @@ def main() -> None:
         "experiment": "attention_quality",
         "environment": environment(",".join(sorted({d for d, _ in targets}))),
         "settings": {
-            "validation_text": str(args.validation_text),
+            "validation_text": str(args.validation_text.resolve().relative_to(ROOT)) if args.validation_text.resolve().is_relative_to(ROOT) else str(args.validation_text),
             "validation_sha256": file_sha256(args.validation_text),
             "validation_targets": tokens.numel() - 1,
             "oracle": "cpu float64, reference backend",
