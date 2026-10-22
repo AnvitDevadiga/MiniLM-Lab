@@ -60,6 +60,10 @@ or record that verifies it. Baseline before any change: 16/16 tests passed, ruff
 | Upstream Darwin file changed (`ededa9c0…` → `362142cb…`) | fresh download | The extracted v1 split regenerates byte-identically from the new file; only the Gutenberg header/licence changed. `prepare_science_corpus.py` (v1) still pins the old raw hash and therefore refuses to run; it is left unchanged as a legacy script. v2 pins the hash of the extracted body instead |
 | One training record was written while unrelated documentation edits were uncommitted | record `git.dirty = true` | Re-recorded from a clean tree; the dirty record is kept and marked superseded |
 
+**Release note.** From the first release the default backend is `sdpa`. The path called
+"default" or `auto` in the statements above is now the explicit backend `mha`; `auto` is
+accepted as a legacy alias and checkpoints without a backend field are treated as `mha`.
+
 Verified after the changes:
 
 - Default-backend (`auto`) training on v1 is bitwise identical to the original runs for seeds 42, 43 and 44.

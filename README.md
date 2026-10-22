@@ -6,111 +6,102 @@ Created and maintained by [Anvit Devadiga](https://github.com/AnvitDevadiga).
 
 [![CI](https://github.com/AnvitDevadiga/MiniLM-Lab/actions/workflows/ci.yml/badge.svg)](https://github.com/AnvitDevadiga/MiniLM-Lab/actions/workflows/ci.yml) [![Python 3.12](https://img.shields.io/badge/Python-3.12-111111)](https://www.python.org/) [![MIT](https://img.shields.io/badge/License-MIT-111111)](LICENSE)
 
-MiniLM Lab is a small, inspectable language-model project. It follows the entire path from text to next-byte prediction, then tests whether engineering ideas—like reusing previous attention calculations or storing smaller weights—actually help. It is designed for a laptop budget, not to imitate a commercial chatbot.
+## Purpose
 
-![MiniLM Lab architecture](docs/figures/architecture.svg)
+MiniLM Lab is a small, inspectable decoder-only language model and a laboratory for measuring how implementation choices affect quality, latency, throughput and memory. It runs on a laptop and is built for controlled, reproducible comparisons, not to imitate a commercial chatbot. Every published number comes from a JSON record in [`experiments/records/`](experiments/records/).
 
-### What did the experiment find?
-
-The model trained on public-domain science writing by Darwin and Einstein. Paragraphs from **both** books were held out, so the numbers below are not training-set scores. [Sources and exact file hashes](data/science/manifest.json) · [Full experimental method](docs/experiment_protocol.md).
-
-![Learning curve](docs/figures/learning.svg)
-
-At the final checkpoint, held-out perplexity was **17.58** across **112,111 next-byte predictions**. Perplexity measures prediction uncertainty; lower is better, but it is not a score for how helpful or factual a chatbot is.
-
-![KV-cache benchmark](docs/figures/speed.svg)
-
-The KV cache avoids recomputing attention over the full prompt after every generated token. In this controlled CPU test, it cut generation time from **119.4 ms to 33.4 ms**.
-
-![INT8 storage and latency trade-off](docs/figures/tradeoff.svg)
-
-Weight-only INT8 reduced stored model tensors by **53.6%**, but the reference implementation ran **slower** because it dequantizes weights during each forward pass. Smaller files do not automatically mean faster inference.
-
-These are **one-seed CPU measurements**, not M4/MPS results or claims of general language ability. The training corpus is about **1 MB**. [Read the report, including limitations](docs/research_report.md) or inspect the [raw measured record](docs/data/science_run.json).
-
-### Attention implementation and reproducibility study (October 2026)
-
-The published run reproduces bit-for-bit on CPU. Retraining with seeds 42, 43 and 44 gives held-out perplexity **17.58, 18.99 and 21.07** (mean 19.21 ± 1.75). The published 17.58 is the best of the three, so read it as optimistic.
-
-The same weights were run through three attention implementations: the default `nn.MultiheadAttention` path, PyTorch scaled-dot-product attention (SDPA), and an explicit reference. In float32 they give identical perplexity, top-1 predictions and greedy text on CPU and Apple M4 MPS. SDPA was 3.4–5.4× faster than the reference at 2,048 tokens and used 8–22× less memory. On CPU, the repository's default attention path is nearly as slow as the reference.
-
-![SDPA speedup](docs/figures/attention_speedup.svg)
-
-Trained with each backend on three seeds, the models are indistinguishable in quality, and SDPA training steps are 8–28% faster on CPU. SDPA is now a selectable training backend (`--attention-backend sdpa`). The evidence supports making it the default, but the default stays `auto` so the published commands keep reproducing bit-for-bit.
-
-The KV cache is 2.2–23× faster than recomputation on CPU. On MPS it is *slower* for single short prompts, and once generation passes the context window it gives no benefit at all.
-
-![KV cache speedup](docs/figures/kv_cache_speedup.svg)
-
-### Corpus protocol v2: cleaned text and an untouched test book
-
-`data/science-v2/` removes non-prose text (Darwin's index, front matter, glossaries, tables) with documented rules before splitting. It adds Faraday's *The Chemical History of a Candle* as a test book that is never used for training or checkpoint selection. Automated checks find no exact or near-duplicate passages across splits. Over three seeds, test perplexity is **15.66 ± 2.58** (default attention) and **15.60 ± 2.63** (SDPA). These numbers use different data and must not be compared with the v1 perplexities above. The original v1 corpus and results are preserved unchanged.
-
-Measured on one M4 MacBook (CPU and MPS). CUDA is untested. [Full tables, method and limitations](docs/EXPERIMENT_RESULTS.md) · [research report](docs/research_report.md) · [audit with evidence per claim](docs/implementation_audit.md) · [raw records](experiments/records/).
-
-## Reproduce on a MacBook Air
-
-You need Python 3.12 and the ability to install PyTorch. The commands below run the checks, train the published v1 model on the committed corpus, and score the held-out text. Training time varies by device; on an M4 CPU it takes about two minutes.
-
-```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e '.[dev]'
-make check
-python scripts/train_tiny.py data/science/train.txt \
-  --validation-text data/science/validation.txt \
-  --steps 1000 --eval-interval 250 --gradient-accumulation-steps 4 \
-  --device cpu --seed 42 --output-dir artifacts/runs/science-v1-s42
-python scripts/evaluate.py data/science/train.txt \
-  --validation-text data/science/validation.txt \
-  --checkpoint artifacts/runs/science-v1-s42/best_checkpoint.pt
-```
-
-On CPU with torch 2.14 this reproduces the published v1 run bit-for-bit (held-out perplexity 17.58). Training otherwise chooses Apple MPS when available. The v1 corpus files are committed. `scripts/prepare_science_corpus.py` now refuses to run because Project Gutenberg changed the Darwin file's header, so its raw hash no longer matches. The extracted v1 split is unaffected and still regenerates byte-for-byte; see the [audit](docs/implementation_audit.md).
-
-To rebuild and verify the v2 corpus, then train, select and test under protocol v2 (3 seeds × 2 attention backends):
-
-```bash
-PYTHON=python ./experiments/v2_protocol.sh
-```
-
-## System
+## Implemented ML systems components
 
 | Component | Implementation |
 | --- | --- |
 | Tokenization | UTF-8 byte tokenizer; educational BPE alternative |
 | Decoder | causal multi-head attention, learned positions or RoPE, RMSNorm, SwiGLU, tied token/output embeddings |
-| Training | AdamW, true optimizer-step accumulation, deterministic full-split checkpoint selection, resume with optimizer and RNG state |
+| Attention backends | `sdpa` (PyTorch scaled-dot-product attention, **default**), `mha` (the original `nn.MultiheadAttention` path that produced every v1 result; legacy name `auto`), and `reference` (explicit softmax(QKᵀ/√d)V), all on the same weights |
+| Training | AdamW, true optimizer-step gradient accumulation, full-split checkpoint selection, bitwise resume with optimizer and RNG state |
 | Evaluation | every held-out next token scored once; perplexity and bits per byte |
-| Generation | temperature, top-k, top-p; KV cache with sliding-window refresh; greedy decoding verified token-identical with and without cache |
-| Experiments | attention backend comparison (MHA / SDPA / reference) on CPU and MPS; repeated decode benchmark; portable MLP weight-only INT8 comparison; LoRA linear building block |
-| Reproducibility | append-only JSON records with device, versions, git commit, seeds, data hashes and raw timing samples (`experiments/records/`) |
+| Generation | temperature, top-k, top-p; KV cache with sliding-window refresh; greedy decoding verified token-identical with and without the cache |
+| Benchmarks | matched attention, KV-cache and training-step benchmarks on CPU and Apple MPS, with warmups, rotated order, device synchronization and per-process memory probes |
+| Data | two corpus protocols with SHA-256 manifests and automated contamination checks |
+| Reproducibility | append-only records with device, versions, git commit, seeds, data hashes and raw samples; validated by `scripts/validate_records.py` |
 
-PyTorch provides tensor operations, automatic differentiation, multi-head attention and SDPA. The project exposes the model and systems decisions around those primitives. It is not a claim to reimplement an entire deep-learning framework.
+PyTorch provides tensor operations, autograd and the SDPA kernel. The project exposes the model and systems decisions around those primitives.
 
-## Read the evidence
+![MiniLM Lab architecture](docs/figures/architecture.svg)
 
-- [Experiment results: attention backends, seeds (Oct 2026)](docs/EXPERIMENT_RESULTS.md)
-- [Research paper (PDF)](output/pdf/MiniLM-Lab-Research-Paper.pdf)
-- [Research report](docs/research_report.md)
-- [Raw science run record](docs/data/science_run.json)
-- [Experiment protocol](docs/experiment_protocol.md)
-- [Implementation audit](docs/implementation_audit.md)
-- [2026 positioning](docs/positioning_2026.md)
-- [Roadmap](docs/roadmap.md)
-- [Contributing](CONTRIBUTING.md)
+## Key results
 
-The research paper is generated from the tracked results and benchmark protocol with
-\`python -m pip install -e '.[report]'\` followed by
-\`python scripts/build_research_report.py\`.
+All measurements: one Apple M4 MacBook (16 GB), CPU and MPS, Python 3.12.14, torch 2.14.1. Details and every per-seed value are in [docs/EXPERIMENT_RESULTS.md](docs/EXPERIMENT_RESULTS.md).
 
-## Scope and limitations
+1. **The attention backends compute the same function, but SDPA is far cheaper at long sequences.** In float32 all three give identical held-out perplexity, 100% top-1 agreement with a float64 oracle and identical greedy text. At 2,048 tokens SDPA's forward pass is 3.4–3.9× (CPU) and 3.9–5.4× (MPS) faster than the explicit reference, with 8–22× less extra memory at batch 8.
+2. **Training with SDPA matches the legacy path in quality and is as fast or faster.** Over three seeds on corpus v1, validation perplexity is 19.21 ± 1.75 (MHA) vs 19.04 ± 1.37 (SDPA). A controlled training-step benchmark is 5–28% faster with SDPA on CPU (L=128–1,024) and within 5% on MPS. SDPA is therefore the default from this release.
+3. **The KV cache is not always a win.** It is 2.2–23× faster than recomputation on CPU, but slower on MPS for single short prompts (0.87×) and gives no benefit once generation passes the context window.
+4. **Published single-seed numbers need seeds.** The original v1 run reproduces bit-for-bit on CPU, but seeds 42/43/44 give held-out perplexity 17.58 / 18.99 / 21.07; the published 17.58 is the best of three.
+5. **Corpus v2 adds a held-out test book.** With non-prose text removed and Faraday's *The Chemical History of a Candle* held out, test perplexity is 15.66 ± 2.58 (MHA) and 15.60 ± 2.63 (SDPA) over three seeds. This is a different protocol from v1; the two must not be compared.
 
-- Quality numbers come from 1,000 optimizer steps. Every seed, on both corpora, spends most of that time on an early loss plateau, so the models are under-trained and seed-sensitive.
-- In the legacy v1 corpus, 26% of held-out bytes are the alphabetical index of *On the Origin of Species*, and the validation split both selects checkpoints and is reported. Protocol v2 fixes both, but its numbers are not comparable with v1.
-- Timings come from one laptop and one session per record. MPS conclusions apply to this tiny model, where kernel-launch overhead dominates, and may not hold at larger scale.
-- The PDF paper and the first README figures predate the October 2026 study and are not regenerated from it.
+![SDPA speedup](docs/figures/attention_speedup.svg)
 
-The corpus contains about 1 MB of training text. The model is a controlled educational system for studying language-model mechanics and inference trade-offs. Generated text should not be treated as reliable scientific information.
+![KV cache speedup](docs/figures/kv_cache_speedup.svg)
+
+## Reproduce
+
+Python 3.12. `requirements/release-lock.txt` pins the exact packages used for every record.
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements/release-lock.txt
+python -m pip install -e . --no-deps
+make check                                   # ruff + full test suite
+python scripts/validate_records.py           # provenance of every experiment record
+```
+
+**Legacy v1 result (published 17.58).** v1 commands select the legacy `mha` backend explicitly. On an M4 CPU training takes about two minutes and reproduces the published run bit-for-bit with torch 2.14.
+
+```bash
+python scripts/train_tiny.py data/science/train.txt \
+  --validation-text data/science/validation.txt \
+  --steps 1000 --eval-interval 250 --gradient-accumulation-steps 4 \
+  --device cpu --seed 42 --attention-backend mha --output-dir artifacts/runs/science-v1-s42
+python scripts/evaluate.py data/science/train.txt \
+  --validation-text data/science/validation.txt --device cpu --attention-backend mha \
+  --checkpoint artifacts/runs/science-v1-s42/best_checkpoint.pt
+```
+
+**Experiments.**
+
+```bash
+PYTHON=python ./experiments/sdpa_v1.sh       # v1: MHA vs SDPA training, 3 seeds
+PYTHON=python ./experiments/v2_protocol.sh   # v2: verify corpus, train, select on validation, test once
+python scripts/benchmark_attention.py --device cpu        # also --device mps [--dtype float16]
+python scripts/benchmark_kv_scaling.py --device cpu       # also --device mps [--dtype float16]
+python scripts/benchmark_training_step.py --device cpu    # also --device mps
+python scripts/build_experiment_report.py                 # regenerate tables and figures from records
+```
+
+Checkpoints are not committed (`artifacts/` is ignored). Each training record stores the exact command, seed, data hashes and the checkpoint's SHA-256, so a checkpoint can be regenerated and checked. Bitwise equality is only expected on the same device type and library versions; elsewhere, compare numbers within the tolerances listed in [the release checklist](docs/RELEASE_CHECKLIST.md).
+
+The committed v1 corpus is authoritative. `python scripts/prepare_science_corpus.py --output-dir /tmp/v1` regenerates it from Project Gutenberg and refuses to write unless every split matches the published hashes. As of October 2026 it does, although the Darwin file's header has changed upstream.
+
+## Architecture, reports and evidence
+
+- [Architecture figure](docs/figures/architecture.svg) and model code in [`src/minilm_lab/model.py`](src/minilm_lab/model.py)
+- [Experiment results: all tables, method, limitations](docs/EXPERIMENT_RESULTS.md)
+- [Research report](docs/research_report.md) and [research paper (PDF, v1 only)](output/pdf/MiniLM-Lab-Research-Paper.pdf)
+- [Implementation audit with evidence per claim](docs/implementation_audit.md)
+- [Release checklist](docs/RELEASE_CHECKLIST.md)
+- [Experiment protocol](docs/experiment_protocol.md) · [Roadmap](docs/roadmap.md) · [Contributing](CONTRIBUTING.md)
+- Corpus manifests: [v1](data/science/manifest.json) · [v2](data/science-v2/manifest.json) · [published v1 record](docs/data/science_run.json)
+
+The PDF is generated from the v1 record with `python -m pip install -e '.[report]'` and `python scripts/build_research_report.py`.
+
+## Limitations
+
+- **Small, under-trained models.** Every run is 1,000 optimizer steps on about 1 MB of text. On both corpora each seed spends most of the run on an early loss plateau, so quality depends strongly on the seed. Three seeds give a spread, not a confidence interval.
+- **One held-out test book.** The v2 test set is a single 1861 popular-science lecture series. It measures transfer to one unseen author and topic, not broad cross-author generalization. Its results are now published, so it can no longer guide tuning under an untouched-test claim. The cleaning rules were designed while viewing its raw text (structure only, never model results).
+- **Legacy v1 corpus.** 26% of v1 held-out bytes are Darwin's alphabetical index, and v1 validation both selects checkpoints and is reported. v2 fixes both; v1 is kept unchanged for comparability with the published results.
+- **One machine.** Timings come from one laptop, one session per record. MPS findings apply to this tiny model, where kernel-launch overhead dominates. CUDA is untested. No cross-device or cross-version bitwise reproducibility is claimed.
+- **Older artifacts.** The PDF paper and the September figures ([learning](docs/figures/learning.svg), [speed](docs/figures/speed.svg), [INT8](docs/figures/tradeoff.svg)) describe the single-seed v1 run only. The September KV-cache speedup (3.58×) re-measures at 3.40× on the same hardware, so treat it as a timing, not a constant.
+
+Generated text should not be treated as reliable scientific information.
 
 MIT licensed. © Anvit Devadiga.

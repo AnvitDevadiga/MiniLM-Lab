@@ -26,7 +26,7 @@ paths are untested.
 ### Part A · systems experiments and science-v1
 
 1. **The three attention implementations compute the same function.** In float32,
-   default MHA, SDPA and the explicit reference give identical held-out perplexity to
+   legacy MHA, SDPA and the explicit reference give identical held-out perplexity to
    four decimals, 100% top-1 agreement with a float64 oracle and identical greedy text,
    on CPU and MPS, for three trained seeds. Gradients agree with a float64 oracle and
    pass `gradcheck` under every backend.
@@ -34,10 +34,10 @@ paths are untested.
    (reference/SDPA forward 1.2–1.3× at L=128 → 3.4–3.9× at L=2048 on CPU; 2.0–3.1× →
    3.9–5.4× on MPS) **and avoids the L² score matrix** (B=8, L=2048: 223 vs 1,765 MiB on
    CPU fp32, 180 vs 1,608 MiB on MPS fp32, 90 vs 1,950 MiB on MPS fp16).
-3. **The default MHA path is close to the reference on CPU at inference** (1,439 ms vs
+3. **The legacy MHA path is close to the reference on CPU at inference** (1,439 ms vs
    321 ms for SDPA at B=8, L=2048) and 1.1–1.6× slower than SDPA on MPS.
 4. **KV cache.** On CPU the cache is faster at every measured shape: 2.2–16× over
-   uncached SDPA at batch 1 and 3.8–23× at batch 8 (up to 62× over the uncached default
+   uncached SDPA at batch 1 and 3.8–23× at batch 8 (up to 62× over the uncached legacy MHA
    path). On MPS at batch 1 with prompts of 1–16 tokens it is *slower* (0.87–0.88×);
    it pays off from 128 tokens (1.1×) and reaches 3.4× at 1,024. Past the context
    window every step rebuilds the cache, so caching gives ~1.0× on MPS. Cached and
@@ -45,12 +45,12 @@ paths are untested.
    differ in 2 of 11 configurations (near-tie argmax flips with random weights).
    Cache memory grows by exactly 6,144 bytes per position per sequence (fp32), and
    each concatenating decode step transiently allocates about one full cache copy.
-5. **Training with SDPA vs the default path (science-v1, 3 seeds).** Validation
-   perplexity is indistinguishable: 19.21 ± 1.75 (default) vs 19.04 ± 1.37 (SDPA);
+5. **Training with SDPA vs the legacy MHA path (science-v1, 3 seeds).** Validation
+   perplexity is indistinguishable: 19.21 ± 1.75 (MHA) vs 19.04 ± 1.37 (SDPA);
    paired differences +0.10, +0.02, −0.65. Both backends agree to seven decimals
    while the model sits on its early plateau and diverge only when it leaves it.
-   In the controlled step benchmark, SDPA steps are 8% (L=128) to 28% (L=1,024)
-   faster than the default on CPU with similar memory; on MPS all three backends are
+   In the controlled step benchmark, SDPA steps are 5–28% faster than the legacy
+   MHA path on CPU (8% at L=128, 5% at 256, 8% at 512, 28% at 1,024) with similar memory; on MPS all three backends are
    within ~5% in time and memory. CPU evaluation of the full validation split takes
    ~16% less time with SDPA (1.55 vs 1.85 s mean). Full-run tokens/s were confounded by
    run order (the first run of the session was the fastest) and are not used for claims.
@@ -64,20 +64,21 @@ paths are untested.
    Zero exact and zero near duplicates (≥ 50% shared word 8-grams) across
    train/validation/test.
 8. **Test perplexity (Faraday, never used for training or selection):
-   15.66 ± 2.58 (default) and 15.60 ± 2.63 (SDPA)**, 0.1–0.4 above validation in all
+   15.66 ± 2.58 (MHA) and 15.60 ± 2.63 (SDPA)**, 0.1–0.4 above validation in all
    six runs. Seeds dominate the spread (13.8–18.6); the backend does not
    (paired test differences −0.10, 0.00, −0.08).
 
 ### Decision on SDPA
 
 Correctness (forward, gradients, causality, cache equivalence) and performance are
-verified. SDPA matches the default's quality on two corpora, trains as fast or faster,
-evaluates faster, and is much faster with far less memory at long-sequence inference.
-**Recommendation: make SDPA the default for new experiments.** It is *not* switched in
-this branch, because changing the default would silently change what the published
-v1 commands run; doing so should come with `--attention-backend auto` added to every
-v1 reproduction command. The default (`auto`) path remains available and is bitwise
-reproducible.
+verified. SDPA matches the legacy path's quality on two corpora, trains as fast or
+faster, evaluates faster, and is much faster with far less memory at long-sequence
+inference. **From the first release, SDPA is the default** for training, evaluation and
+generation. The legacy path is the explicit backend `mha` (named `auto` in records and
+checkpoints written before the release; that name is still accepted), and every v1
+reproduction command selects it explicitly. With `--attention-backend mha`, v1 training
+on CPU remains bitwise identical to the published runs. The explicit `reference`
+backend remains selectable but did not produce any published training result.
 
 ## Method
 
@@ -127,9 +128,10 @@ python scripts/benchmark_kv_scaling.py --device mps --dtype float16
 python scripts/benchmark_training_step.py --device cpu
 python scripts/benchmark_training_step.py --device mps
 
-# science-v1: matched default vs SDPA training, then inference quality per backend
+# science-v1: matched MHA vs SDPA training, then inference quality per backend
+# (the published records used run directories named auto-s4N; the script now writes mha-s4N)
 PYTHON=python ./experiments/sdpa_v1.sh
-python scripts/compare_attention_quality.py artifacts/runs/sdpa-v1/auto-s4{2,3,4}/best_checkpoint.pt
+python scripts/compare_attention_quality.py artifacts/runs/sdpa-v1/mha-s4{2,3,4}/best_checkpoint.pt
 
 # science-v2: rebuild corpus (verified against committed files), train, select, test once
 PYTHON=python ./experiments/v2_protocol.sh
@@ -440,7 +442,7 @@ Past the window (context 128, prompt 32, 224 tokens): 128 of 224 cached steps re
 | mps/float16 | 8 | 191 | 4.48 MiB | 3072 | 4.52 MiB |
 <!-- END GENERATED:kv_memory -->
 
-## Experiment 04 · Matched training: default attention vs SDPA (science-v1 corpus)
+## Experiment 04 · Matched training: legacy MHA vs SDPA (science-v1 corpus)
 
 ### Controlled training-step benchmark
 
@@ -508,6 +510,17 @@ Past the window (context 128, prompt 32, 224 tokens): 128 of 224 cached steps re
 
 Results in this part use a different corpus and preprocessing protocol from Part A.
 **Perplexities are not comparable across the two parts.**
+
+**Test-set status: published.** The Faraday test file was evaluated exactly once, by
+`experiments/v2_protocol.sh` after all training (record
+`evaluation/20261022T043652Z_v2_final_cpu_897db37.json`, six selected checkpoints, one
+score each). No training command references it, and no hyperparameter, checkpoint or
+code change was made after seeing its results. Its cleaning rules (start/end markers,
+bracketed editorial paragraphs, numeric tables) were designed while viewing the book's
+raw text, but never using any model output on it. Now that the results are published,
+this test set must not guide further tuning under the same untouched-test claim; a new
+experiment that changes the model or protocol in response needs a new held-out book.
+One book also cannot establish cross-author generalization in general.
 
 ## Corpus science-v2
 

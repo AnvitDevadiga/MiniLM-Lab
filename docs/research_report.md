@@ -16,14 +16,14 @@ Hardware: Apple M4 (16 GB), CPU and MPS, torch 2.14.1. CUDA was not available.
 - **Reproduction.** The published seed-42 run reproduces bit-for-bit. Seeds 42/43/44
   give held-out perplexity 17.58 / 18.99 / 21.07 (19.21 ± 1.75); the published value
   is the best of three. Every seed sits near 3.27 nats until roughly step 750.
-- **Attention implementations.** The default `nn.MultiheadAttention` path, PyTorch
+- **Attention implementations.** The legacy `nn.MultiheadAttention` path (`mha`), PyTorch
   SDPA and an explicit reference compute the same function (identical fp32 perplexity,
   100% top-1 agreement with a float64 oracle, gradients verified with `gradcheck`).
   At inference SDPA is up to 3.9× (CPU) and 5.4× (MPS) faster than the reference at
   2,048 tokens and needs 8–22× less memory.
-- **Matched training, default vs SDPA (3 seeds).** Validation perplexity
+- **Matched training, legacy MHA vs SDPA (3 seeds).** Validation perplexity
   19.21 ± 1.75 vs 19.04 ± 1.37 with no consistent paired direction. A controlled
-  training-step benchmark shows SDPA 8–28% faster on CPU (L=128–1,024) and within
+  training-step benchmark shows SDPA 5–28% faster on CPU (L=128–1,024) and within
   ~5% of the other backends on MPS.
 - **KV cache.** 2.2–23× faster than recomputation on CPU, but slower than
   recomputation on MPS for batch-1 prompts under 128 tokens, and no faster once
@@ -48,7 +48,7 @@ chosen on validation; test scored once per selected checkpoint after all trainin
 
 | Backend | Seeds | Validation perplexity | Test perplexity (Faraday) |
 | --- | ---: | ---: | ---: |
-| Default (MHA) | 42, 43, 44 | 15.41 ± 2.70 | 15.66 ± 2.58 |
+| Legacy MHA | 42, 43, 44 | 15.41 ± 2.70 | 15.66 ± 2.58 |
 | SDPA | 42, 43, 44 | 15.37 ± 2.73 | 15.60 ± 2.63 |
 
 Test perplexity is 0.1–0.4 above validation in every run: the model transfers to an
@@ -56,6 +56,13 @@ unseen author and topic at close to its in-domain level, at this (low) level of
 quality. Seeds, not backends, dominate the spread. **These numbers must not be
 compared with the v1 perplexities above or below**: v2 removes non-prose text and
 uses a different validation set.
+
+The Faraday test set was evaluated once, after all training, and is now published:
+it must not guide further tuning under the same untouched-test claim, and one book
+does not establish broad cross-author generalization.
+
+From the first release SDPA is the default backend; every v1 reproduction command
+passes `--attention-backend mha` (recorded as `auto` before the release).
 
 ### Reproduce (October 2026)
 
