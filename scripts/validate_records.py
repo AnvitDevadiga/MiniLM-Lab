@@ -38,6 +38,9 @@ def validate() -> tuple[list[str], int]:
     errors = []
     superseded = json.loads((RECORDS / "SUPERSEDED.json").read_text())["records"]
     paths = sorted(RECORDS.glob("*/*.json"))
+    checkpoints = set()
+    for path in RECORDS.glob("training/*.json"):
+        checkpoints.add(json.loads(path.read_text())["results"].get("best_checkpoint_sha256"))
     for relative, entry in superseded.items():
         for path in (relative, entry["superseded_by"]):
             if not (RECORDS / path).exists():
@@ -80,6 +83,11 @@ def validate() -> tuple[list[str], int]:
                     errors.append(f"{relative}: split {name} hash differs from {info['path']}")
             if any(not isinstance(row.get("seed"), int) for row in record["results"]):
                 errors.append(f"{relative}: evaluation row without seed")
+        elif record["experiment"].startswith("legacy_"):
+            if settings.get("checkpoint_sha256") not in checkpoints:
+                errors.append(f"{relative}: checkpoint does not match any recorded training run")
+            if "validation_text" in settings and sha256(data_path(settings["validation_text"])) != settings["validation_sha256"]:
+                errors.append(f"{relative}: validation text hash differs")
         elif record["experiment"] in {"attention_backends", "kv_cache_scaling", "training_step"}:
             for key in ("warmup", "repeats", "seed"):
                 if key not in settings:
