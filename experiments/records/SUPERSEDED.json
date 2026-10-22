@@ -52,6 +52,10 @@
     "kv_cache/20261022T040019Z_kv_mps_float16_93507c4.json": {
       "reason": "historical measurement without raw per-repeat timing samples (summaries only; audit finding 4). Its values are kept unchanged but cannot be re-derived; replaced by a re-measurement with the same settings that stores raw samples",
       "superseded_by": "kv_cache/20261022T053547Z_kv_mps_float16_57be26d.json"
+    },
+    "identity/20261022T053900Z_model_identity_attestation_935a229.json": {
+      "reason": "recorded while a regenerated report was uncommitted (git.dirty = true); identical attestation re-recorded from a clean tree",
+      "superseded_by": "identity/20261022T053914Z_model_identity_attestation_935a229.json"
     }
   }
 }
