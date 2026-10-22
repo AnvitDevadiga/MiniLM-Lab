@@ -10,7 +10,13 @@ import torch
 
 from minilm_lab.data import load_text, make_batch, split_tokens
 from minilm_lab.metrics import evaluate_tokens
-from minilm_lab.model import ATTENTION_BACKENDS, MiniLM, MiniLMConfig
+from minilm_lab.model import (
+    ATTENTION_BACKENDS,
+    DEFAULT_ATTENTION_BACKEND,
+    MiniLM,
+    MiniLMConfig,
+    canonical_backend,
+)
 from minilm_lab.provenance import peak_rss_bytes, synchronize
 from minilm_lab.tokenizer import BPETokenizer, ByteTokenizer
 
@@ -36,9 +42,13 @@ def main() -> None:
     parser.add_argument("--tokenizer", type=Path, default=None, help="BPE JSON artifact; omit for byte tokenizer")
     parser.add_argument("--gradient-accumulation-steps", type=int, default=1)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--attention-backend", choices=ATTENTION_BACKENDS, default="auto", help="auto keeps the original MHA path")
+    parser.add_argument(
+        "--attention-backend", choices=(*ATTENTION_BACKENDS, "auto"), default=DEFAULT_ATTENTION_BACKEND,
+        help="sdpa (default); mha reproduces science-v1 results ('auto' is its legacy name); reference is the explicit implementation",
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts"))
     args = parser.parse_args()
+    args.attention_backend = canonical_backend(args.attention_backend)
     if args.steps < 1 or args.eval_interval < 1 or args.gradient_accumulation_steps < 1:
         parser.error("steps, eval interval and accumulation must be positive")
     output = args.output_dir / "tiny_checkpoint.pt"
@@ -68,7 +78,7 @@ def main() -> None:
         checkpoint = torch.load(output, map_location=device, weights_only=True)
         if checkpoint["config"] != config.__dict__ or checkpoint.get("corpus_sha256") != corpus_sha256:
             raise ValueError("resume config or corpus differs from checkpoint")
-        if checkpoint.get("attention_backend", "auto") != args.attention_backend:
+        if canonical_backend(checkpoint.get("attention_backend")) != args.attention_backend:
             raise ValueError("resume attention backend differs from checkpoint")
         model.load_state_dict(checkpoint["model"])
         if "optimizer" in checkpoint:

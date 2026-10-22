@@ -19,9 +19,14 @@ BG, PANEL, EDGE = "#0b1018", "#151d29", "#2c394b"
 INK, MUTED = "#f4f7fb", "#a9b8c9"
 # Validated categorical slots 1-3 (dark steps) against the panel surface.
 SERIES = ("#3987e5", "#d95926", "#199e70")
-BACKEND_LABEL = {"auto": "MHA (default)", "sdpa": "SDPA", "reference": "Reference"}
+BACKEND_LABEL = {"mha": "MHA (legacy v1)", "sdpa": "SDPA", "reference": "Reference"}
+
+
+def canon(backend: str | None) -> str:
+    """Records written before the first release name the legacy MHA path 'auto'."""
+    return {"auto": "mha", None: "mha"}.get(backend, backend)
 # Drawn dashed (and last) so a series that coincides with another stays visible.
-DASHED = {"MHA (default)"}
+DASHED = {"MHA (legacy v1)"}
 TARGET_ORDER = ("cpu/float32", "mps/float32", "mps/float16", "mps/bfloat16")
 
 
@@ -37,7 +42,7 @@ def latest(directory: Path) -> dict[str, dict]:
 
 
 def rows_by(record: dict) -> dict[tuple, dict]:
-    return {(row["backend"], row["batch"], row["seq_len"]): row for row in record["results"]}
+    return {(canon(row["backend"]), row["batch"], row["seq_len"]): row for row in record["results"]}
 
 
 def mib(row: dict) -> str:
@@ -61,12 +66,12 @@ def forward_table(key: str, record: dict) -> str:
     lines = [
         f"**{key}** · warmup {settings['warmup']}, {settings['repeats']} repeats · median ms (p95) · peak extra MiB per forward",
         "",
-        "| B | L | MHA (default) | SDPA | Reference | Ref / SDPA | MHA MiB | SDPA MiB | Ref MiB |",
+        "| B | L | MHA (legacy v1) | SDPA | Reference | Ref / SDPA | MHA MiB | SDPA MiB | Ref MiB |",
         "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for batch in settings["batch_sizes"]:
         for length in settings["seq_lens"]:
-            cells = [rows.get((backend, batch, length)) for backend in ("auto", "sdpa", "reference")]
+            cells = [rows.get((backend, batch, length)) for backend in ("mha", "sdpa", "reference")]
             if not all(cells):
                 continue
             timing = [f"{c['forward_ms']['median']:.2f} ({c['forward_ms']['p95']:.2f})" for c in cells]
@@ -101,7 +106,7 @@ def variability_table(records: dict[str, dict]) -> str:
     lines = ["| Target | Phase | Median CV | Worst CV | Worst config |", "| --- | --- | ---: | ---: | --- |"]
     for key, record in records.items():
         for phase in ("forward_ms", "prefill_ms", "decode_ms_per_step"):
-            values = [(row[phase]["cv"], f"{row['backend']} B={row['batch']} L={row['seq_len']}") for row in record["results"] if phase in row]
+            values = [(row[phase]["cv"], f"{canon(row['backend'])} B={row['batch']} L={row['seq_len']}") for row in record["results"] if phase in row]
             if values:
                 ordered = sorted(values)
                 lines.append(f"| {key} | {phase} | {ordered[len(ordered) // 2][0]:.3f} | {ordered[-1][0]:.3f} | {ordered[-1][1]} |")
@@ -121,7 +126,7 @@ def quality_table(record: dict) -> str:
     ]
     for row in record["results"]:
         lines.append(
-            f"| {row['seed']} | {row['device']}/{row['dtype']} | {BACKEND_LABEL[row['backend']]} | {row['max_abs_logit_error']:.2e} "
+            f"| {row['seed']} | {row['device']}/{row['dtype']} | {BACKEND_LABEL[canon(row['backend'])]} | {row['max_abs_logit_error']:.2e} "
             f"| {row['mean_abs_logit_error']:.2e} | {100 * row['top1_agreement']:.3f}% | {row['perplexity']:.4f} "
             f"| {row['greedy_identical_sequences']}/{row['greedy_prompts']} |"
         )
@@ -131,9 +136,9 @@ def quality_table(record: dict) -> str:
 
 
 def seed_table(record: dict) -> str:
-    rows = [r for r in record["results"] if r["device"] == "cpu" and r["dtype"] == "float32" and r["backend"] == "auto"]
+    rows = [r for r in record["results"] if r["device"] == "cpu" and r["dtype"] == "float32" and canon(r["backend"]) == "mha"]
     if not rows:
-        return "_No CPU float32 default-backend rows recorded._"
+        return "_No CPU float32 legacy-MHA rows recorded._"
     values = [r["perplexity"] for r in rows]
     mean = sum(values) / len(values)
     std = math.sqrt(sum((v - mean) ** 2 for v in values) / (len(values) - 1)) if len(values) > 1 else 0.0
@@ -245,7 +250,7 @@ def figures(records: dict[str, dict]) -> list[tuple[str, str]]:
         ratio_panels.append((key, ratio_series, "reference ÷ SDPA forward time", lambda v: f"{v:g}×", 1.0))
         big = max(batches)
         memory_series = []
-        for color, backend in sorted(zip(SERIES, ("auto", "sdpa", "reference")), key=lambda item: item[1] == "auto"):
+        for color, backend in sorted(zip(SERIES, ("mha", "sdpa", "reference")), key=lambda item: item[1] == "mha"):
             pts = [
                 (length, rows[(backend, big, length)]["memory"]["peak_extra_bytes"] / 2**20,
                  f"{key} {BACKEND_LABEL[backend]} B={big} L={length}: {rows[(backend, big, length)]['memory']['peak_extra_bytes'] / 2**20:.1f} MiB")
@@ -263,7 +268,7 @@ def figures(records: dict[str, dict]) -> list[tuple[str, str]]:
             ]
             decode_series.append((BACKEND_LABEL[backend], color, pts))
         decode_panels.append((f"{key} · batch 1", decode_series, "decode ms per token (median)", lambda v: f"{v:g}"))
-    backends = [(BACKEND_LABEL[b], c) for c, b in zip(SERIES, ("auto", "sdpa", "reference"))]
+    backends = [(BACKEND_LABEL[b], c) for c, b in zip(SERIES, ("mha", "sdpa", "reference"))]
     some = next(iter(records.values()))["settings"]
     return [
         grid_figure(
@@ -275,7 +280,7 @@ def figures(records: dict[str, dict]) -> list[tuple[str, str]]:
         grid_figure(
             "attention_memory.svg", "EXPERIMENT 02 / MEMORY", "Explicit attention pays for the full score matrix.",
             "Peak extra memory during one forward pass, fresh process per point. Log scales on both axes.",
-            "CPU: process peak-RSS delta. MPS: live allocator bytes sampled after every op. Dashed MHA coincides with SDPA on MPS.",
+            "CPU: process peak-RSS delta. MPS: live allocator bytes sampled after every op. Dashed legacy MHA coincides with SDPA on MPS.",
             memory_panels, backends,
         ),
         grid_figure(
@@ -303,19 +308,28 @@ def mean_sd(values: list[float]) -> str:
     return f"{mean:.3f} ± {sd:.3f}"
 
 
+def mha_mode(row: dict) -> dict:
+    """Uncached legacy-MHA mode; named uncached_default in records before the first release."""
+    return row.get("uncached_mha") or row["uncached_default"]
+
+
+def mha_speedup(row: dict) -> float:
+    return row.get("speedup_cached_vs_uncached_mha") or row["speedup_cached_vs_uncached_default"]
+
+
 def kv_table(key: str, record: dict) -> str:
     results, settings = record["results"], record["settings"]
     lines = [
         f"**{key}** · {settings['new_tokens']} greedy tokens · median total ms over {settings['repeats']} repeats · step 0 is the prefill",
         "",
-        "| B | Prompt | Cached | Uncached (SDPA) | Uncached (default) | Cache speedup vs SDPA | vs default | Cached decode ms/step | Tokens identical |",
+        "| B | Prompt | Cached | Uncached (SDPA) | Uncached (MHA) | Cache speedup vs SDPA | vs MHA | Cached decode ms/step | Tokens identical |",
         "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |",
     ]
     for row in results["grid"]:
         same = "yes" if all(row["token_identical_to_cached"].values()) else "**no**"
         lines.append(
             f"| {row['batch']} | {row['prompt_len']} | {row['cached']['total_ms']['median']:.1f} | {row['uncached_sdpa']['total_ms']['median']:.1f} "
-            f"| {row['uncached_default']['total_ms']['median']:.1f} | {row['speedup_cached_vs_uncached_sdpa']:.2f}× | {row['speedup_cached_vs_uncached_default']:.2f}× "
+            f"| {mha_mode(row)['total_ms']['median']:.1f} | {row['speedup_cached_vs_uncached_sdpa']:.2f}× | {mha_speedup(row):.2f}× "
             f"| {row['cached']['decode_ms_per_step']['median']:.2f} | {same} |"
         )
     window = results["window"]
@@ -348,12 +362,12 @@ def training_rows(training: dict[str, dict], evaluations: dict[str, dict], proto
         if settings.get("protocol") != protocol or not record["results"].get("run_summary"):
             continue
         run = record["results"]["run_summary"]
-        row = {"seed": settings["seed"], "backend": settings["attention_backend"], "best_step": record["results"]["best_step"],
+        row = {"seed": settings["seed"], "backend": canon(settings["attention_backend"]), "best_step": record["results"]["best_step"],
                "tokens_per_second": run["train_tokens_per_second"], "train_seconds": run["train_seconds"],
                "peak_rss_mib": run["process_peak_rss_bytes"] / 2**20, "record": record["_path"]}
         for name in eval_names:
             for result in evaluations.get(name, {}).get("results", []):
-                if result["seed"] == row["seed"] and result["attention_backend"] == row["backend"]:
+                if result["seed"] == row["seed"] and canon(result["attention_backend"]) == row["backend"]:
                     row[name] = result["splits"]
         rows.append(row)
     return sorted(rows, key=lambda r: (r["seed"], r["backend"]))
@@ -373,7 +387,7 @@ def sdpa_training_table(rows: list[dict]) -> str:
             f"| {cpu.get('validation', {}).get('eval_seconds', float('nan')):.2f} | {mps.get('validation', {}).get('eval_seconds', float('nan')):.2f} |"
         )
     lines += ["", "| Backend | n | Val perplexity mean ± sd | Train tok/s mean ± sd | Peak RSS MiB mean ± sd | CPU eval s mean ± sd |", "| --- | ---: | ---: | ---: | ---: | ---: |"]
-    for backend in ("auto", "sdpa"):
+    for backend in ("mha", "sdpa"):
         group = [r for r in rows if r["backend"] == backend and "sdpa_v1_eval_cpu" in r]
         if group:
             lines.append(
@@ -384,11 +398,11 @@ def sdpa_training_table(rows: list[dict]) -> str:
     paired = []
     for seed in sorted({r["seed"] for r in rows}):
         pair = {r["backend"]: r for r in rows if r["seed"] == seed and "sdpa_v1_eval_cpu" in r}
-        if {"auto", "sdpa"} <= pair.keys():
-            paired.append((seed, pair["sdpa"]["sdpa_v1_eval_cpu"]["validation"]["perplexity"] - pair["auto"]["sdpa_v1_eval_cpu"]["validation"]["perplexity"],
-                           pair["sdpa"]["tokens_per_second"] / pair["auto"]["tokens_per_second"]))
+        if {"mha", "sdpa"} <= pair.keys():
+            paired.append((seed, pair["sdpa"]["sdpa_v1_eval_cpu"]["validation"]["perplexity"] - pair["mha"]["sdpa_v1_eval_cpu"]["validation"]["perplexity"],
+                           pair["sdpa"]["tokens_per_second"] / pair["mha"]["tokens_per_second"]))
     if paired:
-        lines += ["", "| Seed | SDPA − default val perplexity | SDPA / default train tok/s |", "| ---: | ---: | ---: |"]
+        lines += ["", "| Seed | SDPA − MHA val perplexity | SDPA / MHA train tok/s |", "| ---: | ---: | ---: |"]
         lines += [f"| {seed} | {delta:+.3f} | {ratio:.3f}× |" for seed, delta, ratio in paired]
     return "\n".join(lines)
 
@@ -407,7 +421,7 @@ def v2_table(rows: list[dict]) -> str:
             f"| **{s['test']['perplexity']:.3f}** | **{s['test']['bits_per_byte']:.4f}** | {s['darwin_validation']['perplexity']:.3f} | {s['einstein_validation']['perplexity']:.3f} |"
         )
     lines += ["", "| Backend | n | Val perplexity mean ± sd | Test perplexity mean ± sd |", "| --- | ---: | ---: | ---: |"]
-    for backend in ("auto", "sdpa"):
+    for backend in ("mha", "sdpa"):
         group = [r for r in rows if r["backend"] == backend and "v2_final_cpu" in r]
         if group:
             lines.append(f"| {BACKEND_LABEL[backend]} | {len(group)} | {mean_sd([r['v2_final_cpu']['validation']['perplexity'] for r in group])} | {mean_sd([r['v2_final_cpu']['test']['perplexity'] for r in group])} |")
@@ -433,12 +447,12 @@ def training_step_table(records: dict[str, dict]) -> str:
         lines += [
             f"**{key}** · batch {s['batch_size']} · forward + backward + AdamW · {s['repeats']} repeats after {s['warmup']} warmups · median (p95)",
             "",
-            "| L | Backend | Step ms | Tokens/s | First-step extra memory MiB | max abs loss difference vs default |",
+            "| L | Backend | Step ms | Tokens/s | First-step extra memory MiB | max abs loss difference vs MHA |",
             "| ---: | --- | ---: | ---: | ---: | ---: |",
         ]
         for row in record["results"]:
             lines.append(
-                f"| {row['seq_len']} | {BACKEND_LABEL[row['backend']]} | {row['step_ms']['median']:.1f} ({row['step_ms']['p95']:.1f}) "
+                f"| {row['seq_len']} | {BACKEND_LABEL[canon(row['backend'])]} | {row['step_ms']['median']:.1f} ({row['step_ms']['p95']:.1f}) "
                 f"| {row['tokens_per_second']['median']:.0f} | {row['memory']['peak_extra_bytes'] / 2**20:.1f} | {row['max_abs_loss_difference_vs_first_backend']:.1e} |"
             )
         lines.append("")

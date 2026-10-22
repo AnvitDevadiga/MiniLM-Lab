@@ -112,16 +112,17 @@ def test_resume_reproduces_uninterrupted_training(tmp_path: Path) -> None:
 def test_training_records_backend_and_rejects_backend_change_on_resume(tmp_path: Path) -> None:
     text = tmp_path / "corpus.txt"
     text.write_text("Natural selection acts slowly on small variations. " * 40, encoding="utf-8")
-    output = tmp_path / "sdpa"
+    output = tmp_path / "reference"
     command = [
         sys.executable, str(ROOT / "scripts/train_tiny.py"), str(text), "--steps", "2", "--context-length", "16",
         "--embedding-dim", "16", "--num-layers", "1", "--num-heads", "2", "--batch-size", "2", "--eval-interval", "2",
         "--device", "cpu", "--output-dir", str(output),
     ]
-    subprocess.run(command + ["--attention-backend", "sdpa"], check=True, capture_output=True, cwd=ROOT)
+    subprocess.run(command + ["--attention-backend", "reference"], check=True, capture_output=True, cwd=ROOT)
     checkpoint = torch.load(output / "tiny_checkpoint.pt", weights_only=True)
-    assert checkpoint["attention_backend"] == "sdpa"
+    assert checkpoint["attention_backend"] == "reference"
     summary = json.loads((output / "run_summary.json").read_text())
-    assert summary["attention_backend"] == "sdpa" and summary["train_tokens"] == 2 * 2 * 16
+    assert summary["attention_backend"] == "reference" and summary["train_tokens"] == 2 * 2 * 16
+    # Resuming without the flag selects the sdpa default, which must be refused.
     resumed = subprocess.run(command + ["--resume"], check=False, capture_output=True, text=True, cwd=ROOT)
     assert resumed.returncode != 0 and "attention backend" in resumed.stderr

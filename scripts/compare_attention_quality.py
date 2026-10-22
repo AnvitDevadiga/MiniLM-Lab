@@ -56,7 +56,7 @@ def main() -> None:
     parser.add_argument("checkpoints", type=Path, nargs="+")
     parser.add_argument("--validation-text", type=Path, default=ROOT / "data/science/validation.txt")
     parser.add_argument("--targets", default="cpu:float32,mps:float32,mps:float16,mps:bfloat16")
-    parser.add_argument("--backends", default="auto,sdpa,reference")
+    parser.add_argument("--backends", default="mha,sdpa,reference")
     parser.add_argument("--prompts", type=int, default=8)
     parser.add_argument("--generate-tokens", type=int, default=64)
     parser.add_argument("--output-dir", type=Path, default=ROOT / "experiments/records/attention_quality")

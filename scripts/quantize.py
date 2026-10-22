@@ -10,7 +10,12 @@ from pathlib import Path
 import torch
 
 from minilm_lab.metrics import evaluate_tokens
-from minilm_lab.model import MiniLM, MiniLMConfig
+from minilm_lab.model import (
+    ATTENTION_BACKENDS,
+    DEFAULT_ATTENTION_BACKEND,
+    MiniLM,
+    MiniLMConfig,
+)
 from minilm_lab.quantization import quantize_linear_weights, stored_parameter_bytes
 from minilm_lab.tokenizer import ByteTokenizer
 
@@ -33,12 +38,17 @@ def main() -> None:
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--validation-text", type=Path, required=True)
     parser.add_argument("--output", type=Path, default=Path("artifacts/int8-comparison.json"))
+    parser.add_argument(
+        "--attention-backend", choices=(*ATTENTION_BACKENDS, "auto"), default=DEFAULT_ATTENTION_BACKEND,
+        help="sdpa (default); mha reproduces published science-v1 measurements",
+    )
     args = parser.parse_args()
     checkpoint = torch.load(args.checkpoint, map_location="cpu", weights_only=True)
     if checkpoint.get("tokenizer") != "byte":
         parser.error("this reference experiment currently supports byte checkpoints")
     model = MiniLM(MiniLMConfig(**checkpoint["config"]))
     model.load_state_dict(checkpoint["model"])
+    model.set_attention_backend(args.attention_backend)
     model.eval()
     compact = quantize_linear_weights(copy.deepcopy(model)).eval()
     tokens = torch.tensor(ByteTokenizer().encode(args.validation_text.read_text(encoding="utf-8")), dtype=torch.long)
@@ -49,6 +59,7 @@ def main() -> None:
         "method": "per-output-channel symmetric INT8 linear weights; dequantize on each forward pass",
         "scope": "MLP nn.Linear layers; attention projections and tied LM head remain FP32",
         "device": "cpu",
+        "attention_backend": model.blocks[0].attention.backend,
         "original_validation_loss": original["validation_loss"],
         "int8_validation_loss": quantized["validation_loss"],
         "loss_delta": quantized["validation_loss"] - original["validation_loss"],

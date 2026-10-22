@@ -5,7 +5,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 PY=${PYTHON:-python}
-BACKENDS=${BACKENDS:-"auto sdpa"}
+# mha is the legacy path (recorded as "auto" in the published v2 records).
+BACKENDS=${BACKENDS:-"mha sdpa"}
 RUNS=artifacts/runs/v2
 COMMIT=$(git rev-parse --short HEAD)
 if [ "${SKIP_PREPARE:-0}" != 1 ]; then "$PY" scripts/prepare_science_corpus_v2.py > /dev/null; fi

@@ -171,7 +171,7 @@ report uses the latest record per name or device/dtype; superseded records stay 
 <!-- BEGIN GENERATED:forward -->
 **cpu/float32** · warmup 3, 10 repeats · median ms (p95) · peak extra MiB per forward
 
-| B | L | MHA (default) | SDPA | Reference | Ref / SDPA | MHA MiB | SDPA MiB | Ref MiB |
+| B | L | MHA (legacy v1) | SDPA | Reference | Ref / SDPA | MHA MiB | SDPA MiB | Ref MiB |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | 1 | 128 | 1.86 (2.06) | 1.42 (2.40) | 1.78 (2.04) | 1.25× | 4.1 | 4.0 | 4.0 |
 | 1 | 256 | 4.18 (4.81) | 3.00 (3.45) | 3.72 (3.84) | 1.24× | 8.9 | 5.2 | 7.3 |
@@ -191,7 +191,7 @@ report uses the latest record per name or device/dtype; superseded records stay 
 
 **mps/float32** · warmup 3, 10 repeats · median ms (p95) · peak extra MiB per forward
 
-| B | L | MHA (default) | SDPA | Reference | Ref / SDPA | MHA MiB | SDPA MiB | Ref MiB |
+| B | L | MHA (legacy v1) | SDPA | Reference | Ref / SDPA | MHA MiB | SDPA MiB | Ref MiB |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | 1 | 128 | 1.88 (1.98) | 1.68 (1.82) | 5.17 (5.42) | 3.08× | 1.4 | 1.4 | 1.4 |
 | 1 | 256 | 2.77 (3.19) | 2.34 (2.92) | 6.53 (8.16) | 2.80× | 2.8 | 2.8 | 4.1 |
@@ -211,7 +211,7 @@ report uses the latest record per name or device/dtype; superseded records stay 
 
 **mps/float16** · warmup 3, 10 repeats · median ms (p95) · peak extra MiB per forward
 
-| B | L | MHA (default) | SDPA | Reference | Ref / SDPA | MHA MiB | SDPA MiB | Ref MiB |
+| B | L | MHA (legacy v1) | SDPA | Reference | Ref / SDPA | MHA MiB | SDPA MiB | Ref MiB |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | 1 | 128 | 2.02 (2.23) | 1.88 (2.27) | 5.54 (5.74) | 2.95× | 0.7 | 0.7 | 1.2 |
 | 1 | 256 | 2.58 (2.88) | 2.21 (2.41) | 6.48 (6.92) | 2.94× | 1.4 | 1.4 | 4.2 |
@@ -302,10 +302,10 @@ report uses the latest record per name or device/dtype; superseded records stay 
 | cpu/float32 | forward_ms | 0.074 | 0.493 | reference B=8 L=512 |
 | cpu/float32 | prefill_ms | 0.099 | 0.537 | sdpa B=4 L=256 |
 | cpu/float32 | decode_ms_per_step | 0.130 | 0.935 | reference B=8 L=1024 |
-| mps/float32 | forward_ms | 0.040 | 0.454 | auto B=4 L=256 |
+| mps/float32 | forward_ms | 0.040 | 0.454 | mha B=4 L=256 |
 | mps/float32 | prefill_ms | 0.040 | 0.266 | sdpa B=1 L=512 |
 | mps/float32 | decode_ms_per_step | 0.182 | 0.474 | reference B=4 L=256 |
-| mps/float16 | forward_ms | 0.048 | 0.165 | auto B=4 L=128 |
+| mps/float16 | forward_ms | 0.048 | 0.165 | mha B=4 L=128 |
 | mps/float16 | prefill_ms | 0.033 | 0.139 | reference B=8 L=512 |
 | mps/float16 | decode_ms_per_step | 0.166 | 0.339 | reference B=8 L=1024 |
 <!-- END GENERATED:variability -->
@@ -317,40 +317,40 @@ Oracle: cpu float64, reference backend; 112,111 held-out targets; greedy: 8 prom
 
 | Seed | Target | Backend | max abs Δlogit | mean abs Δlogit | top-1 agree | Perplexity | Greedy identical |
 | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| 42 | cpu/float32 | MHA (default) | 3.60e-05 | 1.04e-06 | 100.000% | 17.5827 | 8/8 |
+| 42 | cpu/float32 | MHA (legacy v1) | 3.60e-05 | 1.04e-06 | 100.000% | 17.5827 | 8/8 |
 | 42 | cpu/float32 | SDPA | 3.40e-05 | 1.04e-06 | 100.000% | 17.5827 | 8/8 |
 | 42 | cpu/float32 | Reference | 3.71e-05 | 1.04e-06 | 100.000% | 17.5827 | 8/8 |
-| 42 | mps/float32 | MHA (default) | 3.31e-05 | 1.03e-06 | 100.000% | 17.5827 | 8/8 |
+| 42 | mps/float32 | MHA (legacy v1) | 3.31e-05 | 1.03e-06 | 100.000% | 17.5827 | 8/8 |
 | 42 | mps/float32 | SDPA | 3.31e-05 | 1.03e-06 | 100.000% | 17.5827 | 8/8 |
 | 42 | mps/float32 | Reference | 4.16e-05 | 1.03e-06 | 100.000% | 17.5827 | 8/8 |
-| 42 | mps/float16 | MHA (default) | 7.36e-02 | 2.18e-03 | 99.880% | 17.5826 | 6/8 |
+| 42 | mps/float16 | MHA (legacy v1) | 7.36e-02 | 2.18e-03 | 99.880% | 17.5826 | 6/8 |
 | 42 | mps/float16 | SDPA | 7.36e-02 | 2.18e-03 | 99.880% | 17.5826 | 6/8 |
 | 42 | mps/float16 | Reference | 8.14e-02 | 2.19e-03 | 99.880% | 17.5825 | 6/8 |
-| 42 | mps/bfloat16 | MHA (default) | 6.00e-01 | 1.75e-02 | 98.786% | 17.5863 | 4/8 |
+| 42 | mps/bfloat16 | MHA (legacy v1) | 6.00e-01 | 1.75e-02 | 98.786% | 17.5863 | 4/8 |
 | 42 | mps/bfloat16 | SDPA | 6.00e-01 | 1.75e-02 | 98.786% | 17.5863 | 4/8 |
 | 42 | mps/bfloat16 | Reference | 6.00e-01 | 1.75e-02 | 98.755% | 17.5858 | 3/8 |
-| 43 | cpu/float32 | MHA (default) | 1.82e-05 | 7.85e-07 | 100.000% | 18.9894 | 8/8 |
+| 43 | cpu/float32 | MHA (legacy v1) | 1.82e-05 | 7.85e-07 | 100.000% | 18.9894 | 8/8 |
 | 43 | cpu/float32 | SDPA | 1.70e-05 | 7.86e-07 | 100.000% | 18.9894 | 8/8 |
 | 43 | cpu/float32 | Reference | 2.00e-05 | 7.87e-07 | 100.000% | 18.9894 | 8/8 |
-| 43 | mps/float32 | MHA (default) | 1.60e-05 | 7.80e-07 | 100.000% | 18.9894 | 8/8 |
+| 43 | mps/float32 | MHA (legacy v1) | 1.60e-05 | 7.80e-07 | 100.000% | 18.9894 | 8/8 |
 | 43 | mps/float32 | SDPA | 1.60e-05 | 7.80e-07 | 100.000% | 18.9894 | 8/8 |
 | 43 | mps/float32 | Reference | 1.84e-05 | 7.80e-07 | 100.000% | 18.9894 | 8/8 |
-| 43 | mps/float16 | MHA (default) | 4.85e-02 | 1.78e-03 | 99.851% | 18.9889 | 6/8 |
+| 43 | mps/float16 | MHA (legacy v1) | 4.85e-02 | 1.78e-03 | 99.851% | 18.9889 | 6/8 |
 | 43 | mps/float16 | SDPA | 4.85e-02 | 1.78e-03 | 99.851% | 18.9889 | 6/8 |
 | 43 | mps/float16 | Reference | 4.85e-02 | 1.78e-03 | 99.855% | 18.9888 | 6/8 |
-| 43 | mps/bfloat16 | MHA (default) | 4.58e-01 | 1.43e-02 | 98.708% | 18.9908 | 3/8 |
+| 43 | mps/bfloat16 | MHA (legacy v1) | 4.58e-01 | 1.43e-02 | 98.708% | 18.9908 | 3/8 |
 | 43 | mps/bfloat16 | SDPA | 4.58e-01 | 1.43e-02 | 98.708% | 18.9908 | 3/8 |
 | 43 | mps/bfloat16 | Reference | 4.29e-01 | 1.43e-02 | 98.701% | 18.9894 | 4/8 |
-| 44 | cpu/float32 | MHA (default) | 1.22e-05 | 7.66e-07 | 100.000% | 21.0677 | 8/8 |
+| 44 | cpu/float32 | MHA (legacy v1) | 1.22e-05 | 7.66e-07 | 100.000% | 21.0677 | 8/8 |
 | 44 | cpu/float32 | SDPA | 9.53e-06 | 7.67e-07 | 100.000% | 21.0677 | 8/8 |
 | 44 | cpu/float32 | Reference | 9.77e-06 | 7.67e-07 | 100.000% | 21.0677 | 8/8 |
-| 44 | mps/float32 | MHA (default) | 1.19e-05 | 7.67e-07 | 100.000% | 21.0677 | 8/8 |
+| 44 | mps/float32 | MHA (legacy v1) | 1.19e-05 | 7.67e-07 | 100.000% | 21.0677 | 8/8 |
 | 44 | mps/float32 | SDPA | 1.19e-05 | 7.67e-07 | 100.000% | 21.0677 | 8/8 |
 | 44 | mps/float32 | Reference | 1.24e-05 | 7.67e-07 | 100.000% | 21.0677 | 8/8 |
-| 44 | mps/float16 | MHA (default) | 3.33e-02 | 1.56e-03 | 99.804% | 21.0675 | 8/8 |
+| 44 | mps/float16 | MHA (legacy v1) | 3.33e-02 | 1.56e-03 | 99.804% | 21.0675 | 8/8 |
 | 44 | mps/float16 | SDPA | 3.33e-02 | 1.56e-03 | 99.804% | 21.0675 | 8/8 |
 | 44 | mps/float16 | Reference | 3.33e-02 | 1.57e-03 | 99.802% | 21.0674 | 7/8 |
-| 44 | mps/bfloat16 | MHA (default) | 2.88e-01 | 1.24e-02 | 98.422% | 21.0724 | 5/8 |
+| 44 | mps/bfloat16 | MHA (legacy v1) | 2.88e-01 | 1.24e-02 | 98.422% | 21.0724 | 5/8 |
 | 44 | mps/bfloat16 | SDPA | 2.88e-01 | 1.24e-02 | 98.422% | 21.0724 | 5/8 |
 | 44 | mps/bfloat16 | Reference | 2.75e-01 | 1.24e-02 | 98.416% | 21.0718 | 6/8 |
 <!-- END GENERATED:quality -->
@@ -371,7 +371,7 @@ Oracle: cpu float64, reference backend; 112,111 held-out targets; greedy: 8 prom
 <!-- BEGIN GENERATED:kv -->
 **cpu/float32** · 64 greedy tokens · median total ms over 5 repeats · step 0 is the prefill
 
-| B | Prompt | Cached | Uncached (SDPA) | Uncached (default) | Cache speedup vs SDPA | vs default | Cached decode ms/step | Tokens identical |
+| B | Prompt | Cached | Uncached (SDPA) | Uncached (MHA) | Cache speedup vs SDPA | vs MHA | Cached decode ms/step | Tokens identical |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
 | 1 | 1 | 21.1 | 46.2 | 52.0 | 2.19× | 2.46× | 0.32 | yes |
 | 1 | 16 | 21.7 | 55.9 | 65.3 | 2.58× | 3.02× | 0.33 | yes |
@@ -388,7 +388,7 @@ Past the window (context 128, prompt 32, 224 tokens): 128 of 224 cached steps re
 
 **mps/float32** · 64 greedy tokens · median total ms over 5 repeats · step 0 is the prefill
 
-| B | Prompt | Cached | Uncached (SDPA) | Uncached (default) | Cache speedup vs SDPA | vs default | Cached decode ms/step | Tokens identical |
+| B | Prompt | Cached | Uncached (SDPA) | Uncached (MHA) | Cache speedup vs SDPA | vs MHA | Cached decode ms/step | Tokens identical |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
 | 1 | 1 | 106.7 | 94.1 | 101.2 | 0.88× | 0.95× | 1.68 | yes |
 | 1 | 16 | 108.7 | 95.0 | 102.1 | 0.87× | 0.94× | 1.70 | yes |
@@ -405,7 +405,7 @@ Past the window (context 128, prompt 32, 224 tokens): 128 of 224 cached steps re
 
 **mps/float16** · 64 greedy tokens · median total ms over 5 repeats · step 0 is the prefill
 
-| B | Prompt | Cached | Uncached (SDPA) | Uncached (default) | Cache speedup vs SDPA | vs default | Cached decode ms/step | Tokens identical |
+| B | Prompt | Cached | Uncached (SDPA) | Uncached (MHA) | Cache speedup vs SDPA | vs MHA | Cached decode ms/step | Tokens identical |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
 | 1 | 1 | 101.0 | 89.8 | 97.2 | 0.89× | 0.96× | 1.56 | yes |
 | 1 | 16 | 102.0 | 94.7 | 100.7 | 0.93× | 0.99× | 1.58 | yes |
@@ -447,35 +447,35 @@ Past the window (context 128, prompt 32, 224 tokens): 128 of 224 cached steps re
 <!-- BEGIN GENERATED:training_step -->
 **cpu/float32** · batch 8 · forward + backward + AdamW · 10 repeats after 3 warmups · median (p95)
 
-| L | Backend | Step ms | Tokens/s | First-step extra memory MiB | max abs loss difference vs default |
+| L | Backend | Step ms | Tokens/s | First-step extra memory MiB | max abs loss difference vs MHA |
 | ---: | --- | ---: | ---: | ---: | ---: |
-| 128 | MHA (default) | 27.8 (28.5) | 36867 | 107.8 | 0.0e+00 |
+| 128 | MHA (legacy v1) | 27.8 (28.5) | 36867 | 107.8 | 0.0e+00 |
 | 128 | SDPA | 25.6 (27.1) | 39931 | 105.7 | 4.8e-07 |
 | 128 | Reference | 27.7 (29.2) | 37029 | 119.5 | 4.8e-07 |
-| 256 | MHA (default) | 54.6 (55.8) | 37542 | 211.1 | 0.0e+00 |
+| 256 | MHA (legacy v1) | 54.6 (55.8) | 37542 | 211.1 | 0.0e+00 |
 | 256 | SDPA | 51.9 (52.7) | 39476 | 206.9 | 0.0e+00 |
 | 256 | Reference | 60.9 (61.9) | 33613 | 283.7 | 0.0e+00 |
-| 512 | MHA (default) | 132.0 (135.1) | 31034 | 415.0 | 0.0e+00 |
+| 512 | MHA (legacy v1) | 132.0 (135.1) | 31034 | 415.0 | 0.0e+00 |
 | 512 | SDPA | 122.0 (134.0) | 33588 | 405.8 | 4.8e-07 |
 | 512 | Reference | 168.2 (170.2) | 24356 | 684.1 | 9.5e-07 |
-| 1024 | MHA (default) | 353.1 (367.3) | 23200 | 800.7 | 0.0e+00 |
+| 1024 | MHA (legacy v1) | 353.1 (367.3) | 23200 | 800.7 | 0.0e+00 |
 | 1024 | SDPA | 276.1 (288.4) | 29670 | 768.2 | 4.8e-07 |
 | 1024 | Reference | 531.4 (543.8) | 15416 | 1918.8 | 4.8e-07 |
 
 **mps/float32** · batch 8 · forward + backward + AdamW · 10 repeats after 3 warmups · median (p95)
 
-| L | Backend | Step ms | Tokens/s | First-step extra memory MiB | max abs loss difference vs default |
+| L | Backend | Step ms | Tokens/s | First-step extra memory MiB | max abs loss difference vs MHA |
 | ---: | --- | ---: | ---: | ---: | ---: |
-| 128 | MHA (default) | 26.6 (27.0) | 38498 | 105.0 | 0.0e+00 |
+| 128 | MHA (legacy v1) | 26.6 (27.0) | 38498 | 105.0 | 0.0e+00 |
 | 128 | SDPA | 25.6 (25.9) | 39940 | 98.5 | 4.8e-07 |
 | 128 | Reference | 25.1 (25.4) | 40733 | 98.6 | 4.8e-07 |
-| 256 | MHA (default) | 51.9 (57.9) | 39498 | 232.3 | 0.0e+00 |
+| 256 | MHA (legacy v1) | 51.9 (57.9) | 39498 | 232.3 | 0.0e+00 |
 | 256 | SDPA | 49.8 (55.7) | 41119 | 220.8 | 0.0e+00 |
 | 256 | Reference | 50.3 (51.8) | 40717 | 221.1 | 0.0e+00 |
-| 512 | MHA (default) | 117.3 (117.7) | 34915 | 567.1 | 0.0e+00 |
+| 512 | MHA (legacy v1) | 117.3 (117.7) | 34915 | 567.1 | 0.0e+00 |
 | 512 | SDPA | 112.3 (115.7) | 36487 | 549.1 | 4.8e-07 |
 | 512 | Reference | 115.3 (124.4) | 35520 | 550.1 | 4.8e-07 |
-| 1024 | MHA (default) | 306.5 (308.2) | 26732 | 1708.3 | 0.0e+00 |
+| 1024 | MHA (legacy v1) | 306.5 (308.2) | 26732 | 1708.3 | 0.0e+00 |
 | 1024 | SDPA | 296.8 (298.8) | 27604 | 1672.3 | 4.8e-07 |
 | 1024 | Reference | 309.9 (311.9) | 26432 | 1676.3 | 0.0e+00 |
 <!-- END GENERATED:training_step -->
@@ -485,19 +485,19 @@ Past the window (context 128, prompt 32, 224 tokens): 128 of 224 cached steps re
 <!-- BEGIN GENERATED:sdpa_training -->
 | Seed | Backend | Selected step | Val loss | Val perplexity | Train tok/s | Train s | Peak RSS MiB | Eval s (CPU) | Eval s (MPS) |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 42 | MHA (default) | 1000 | 2.8669 | 17.583 | 36842 | 111.2 | 444 | 1.71 | 2.34 |
+| 42 | MHA (legacy v1) | 1000 | 2.8669 | 17.583 | 36842 | 111.2 | 444 | 1.71 | 2.34 |
 | 42 | SDPA | 1000 | 2.8726 | 17.683 | 30232 | 135.5 | 448 | 1.53 | 2.15 |
-| 43 | MHA (default) | 1000 | 2.9439 | 18.989 | 29278 | 139.9 | 449 | 1.93 | 2.12 |
+| 43 | MHA (legacy v1) | 1000 | 2.9439 | 18.989 | 29278 | 139.9 | 449 | 1.93 | 2.12 |
 | 43 | SDPA | 1000 | 2.9449 | 19.009 | 31231 | 131.2 | 445 | 1.57 | 2.11 |
-| 44 | MHA (default) | 1000 | 3.0477 | 21.068 | 28831 | 142.1 | 451 | 1.90 | 2.17 |
+| 44 | MHA (legacy v1) | 1000 | 3.0477 | 21.068 | 28831 | 142.1 | 451 | 1.90 | 2.17 |
 | 44 | SDPA | 1000 | 3.0163 | 20.416 | 31579 | 129.7 | 442 | 1.56 | 2.21 |
 
 | Backend | n | Val perplexity mean ± sd | Train tok/s mean ± sd | Peak RSS MiB mean ± sd | CPU eval s mean ± sd |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| MHA (default) | 3 | 19.213 ± 1.753 | 31650.275 ± 4501.336 | 447.990 ± 3.342 | 1.847 ± 0.118 |
+| MHA (legacy v1) | 3 | 19.213 ± 1.753 | 31650.275 ± 4501.336 | 447.990 ± 3.342 | 1.847 ± 0.118 |
 | SDPA | 3 | 19.036 ± 1.366 | 31013.909 ± 698.998 | 445.031 ± 3.414 | 1.550 ± 0.020 |
 
-| Seed | SDPA − default val perplexity | SDPA / default train tok/s |
+| Seed | SDPA − MHA val perplexity | SDPA / MHA train tok/s |
 | ---: | ---: | ---: |
 | 42 | +0.101 | 0.821× |
 | 43 | +0.020 | 1.067× |
@@ -539,15 +539,15 @@ Results in this part use a different corpus and preprocessing protocol from Part
 <!-- BEGIN GENERATED:v2_results -->
 | Seed | Backend | Selected step (on validation) | Val perplexity | Val bits/byte | **Test perplexity** | **Test bits/byte** | Darwin val ppl | Einstein val ppl |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 42 | MHA (default) | 1000 | 14.241 | 3.8319 | **14.472** | **3.8552** | 13.903 | 16.015 |
+| 42 | MHA (legacy v1) | 1000 | 14.241 | 3.8319 | **14.472** | **3.8552** | 13.903 | 16.015 |
 | 42 | SDPA | 1000 | 14.140 | 3.8217 | **14.372** | **3.8451** | 13.802 | 15.908 |
-| 43 | MHA (default) | 1000 | 18.497 | 4.2092 | **18.623** | **4.2190** | 18.009 | 21.065 |
+| 43 | MHA (legacy v1) | 1000 | 18.497 | 4.2092 | **18.623** | **4.2190** | 18.009 | 21.065 |
 | 43 | SDPA | 1000 | 18.497 | 4.2092 | **18.623** | **4.2190** | 18.009 | 21.065 |
-| 44 | MHA (default) | 1000 | 13.501 | 3.7550 | **13.886** | **3.7955** | 13.151 | 15.316 |
+| 44 | MHA (legacy v1) | 1000 | 13.501 | 3.7550 | **13.886** | **3.7955** | 13.151 | 15.316 |
 | 44 | SDPA | 1000 | 13.482 | 3.7530 | **13.802** | **3.7868** | 13.134 | 15.286 |
 
 | Backend | n | Val perplexity mean ± sd | Test perplexity mean ± sd |
 | --- | ---: | ---: | ---: |
-| MHA (default) | 3 | 15.413 ± 2.697 | 15.660 ± 2.583 |
+| MHA (legacy v1) | 3 | 15.413 ± 2.697 | 15.660 ± 2.583 |
 | SDPA | 3 | 15.373 ± 2.726 | 15.599 ± 2.634 |
 <!-- END GENERATED:v2_results -->

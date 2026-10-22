@@ -3,7 +3,8 @@
 Modes (identical weights, inputs, dtype and device):
   cached           KV cache, SDPA attention (what forward_cached always uses)
   uncached_sdpa    full recompute each step, SDPA attention
-  uncached_default full recompute each step, the repository default attention
+  uncached_mha     full recompute each step, legacy MHA attention (records before
+                   the first release call this mode uncached_default)
 The two uncached modes separate the cache effect from the attention kernel.
 
 Every step (step 0 = prompt prefill) is synchronized and timed. The timed loop
@@ -29,7 +30,7 @@ from minilm_lab.provenance import environment, summarize, synchronize, write_rec
 ROOT = Path(__file__).resolve().parents[1]
 DTYPES = {"float32": torch.float32, "float16": torch.float16, "bfloat16": torch.bfloat16}
 ARCHITECTURE = {"vocab_size": 256, "embedding_dim": 192, "num_layers": 4, "num_heads": 6}
-MODES = {"cached": ("sdpa", True), "uncached_sdpa": ("sdpa", False), "uncached_default": ("auto", False)}
+MODES = {"cached": ("sdpa", True), "uncached_sdpa": ("sdpa", False), "uncached_mha": ("mha", False)}
 
 
 def csv(kind):
@@ -105,7 +106,7 @@ def run_modes(args, model: MiniLM, prompt: torch.Tensor, new_tokens: int) -> dic
             "refreshed_steps": runs[0]["refreshed"],
         }
     result["speedup_cached_vs_uncached_sdpa"] = result["uncached_sdpa"]["total_ms"]["median"] / result["cached"]["total_ms"]["median"]
-    result["speedup_cached_vs_uncached_default"] = result["uncached_default"]["total_ms"]["median"] / result["cached"]["total_ms"]["median"]
+    result["speedup_cached_vs_uncached_mha"] = result["uncached_mha"]["total_ms"]["median"] / result["cached"]["total_ms"]["median"]
     return result
 
 
@@ -178,7 +179,7 @@ def main() -> None:
             grid.append(row)
             print(
                 f"{args.device}/{args.dtype} B={batch} L={length:5d} cached {row['cached']['total_ms']['median']:9.1f} ms  "
-                f"uncached_sdpa {row['uncached_sdpa']['total_ms']['median']:9.1f} ms  uncached_default {row['uncached_default']['total_ms']['median']:9.1f} ms  "
+                f"uncached_sdpa {row['uncached_sdpa']['total_ms']['median']:9.1f} ms  uncached_mha {row['uncached_mha']['total_ms']['median']:9.1f} ms  "
                 f"identical={row['token_identical_to_cached']}",
                 flush=True,
             )

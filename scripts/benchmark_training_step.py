@@ -91,7 +91,7 @@ def memory_probe(args) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--device", choices=("cpu", "mps", "cuda"), default="cpu")
-    parser.add_argument("--backends", type=csv(str), default=["auto", "sdpa", "reference"])
+    parser.add_argument("--backends", type=csv(str), default=["mha", "sdpa", "reference"])
     parser.add_argument("--seq-lens", type=csv(int), default=[128, 256, 512, 1024])
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--warmup", type=int, default=3)

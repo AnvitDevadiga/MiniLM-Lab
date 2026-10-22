@@ -8,7 +8,12 @@ import torch
 
 from minilm_lab.generation import generate
 from minilm_lab.kv_cache import generate_with_kv_cache
-from minilm_lab.model import MiniLM, MiniLMConfig
+from minilm_lab.model import (
+    ATTENTION_BACKENDS,
+    DEFAULT_ATTENTION_BACKEND,
+    MiniLM,
+    MiniLMConfig,
+)
 from minilm_lab.tokenizer import BPETokenizer, ByteTokenizer
 
 
@@ -19,6 +24,10 @@ def main() -> None:
     parser.add_argument("--repeats", type=int, default=7)
     parser.add_argument("--device", choices=("auto", "cpu", "mps"), default="auto")
     parser.add_argument("--output", type=Path, default=None)
+    parser.add_argument(
+        "--attention-backend", choices=(*ATTENTION_BACKENDS, "auto"), default=DEFAULT_ATTENTION_BACKEND,
+        help="sdpa (default); mha reproduces published science-v1 measurements",
+    )
     args = parser.parse_args()
     if args.tokens < 1 or args.repeats < 3:
         parser.error("tokens must be positive and repeats must be at least three")
@@ -26,6 +35,7 @@ def main() -> None:
     checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=True)
     model = MiniLM(MiniLMConfig(**checkpoint["config"])).to(device)
     model.load_state_dict(checkpoint["model"])
+    model.set_attention_backend(args.attention_backend)
     tokenizer = ByteTokenizer() if checkpoint.get("tokenizer", "byte") == "byte" else BPETokenizer.load(checkpoint["tokenizer"])
     prompt = "The experiment shows "
     modes = {
@@ -48,6 +58,7 @@ def main() -> None:
     cached = statistics.median(timings["cached"])
     result = {
         "device": device,
+        "attention_backend": model.blocks[0].attention.backend,
         "generated_tokens": args.tokens,
         "repeats": args.repeats,
         "warmup_runs_per_mode": 1,

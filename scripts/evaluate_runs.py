@@ -18,7 +18,7 @@ from pathlib import Path
 import torch
 
 from minilm_lab.metrics import evaluate_tokens
-from minilm_lab.model import MiniLM, MiniLMConfig
+from minilm_lab.model import MiniLM, MiniLMConfig, canonical_backend
 from minilm_lab.provenance import environment, file_sha256, synchronize, write_record
 from minilm_lab.tokenizer import ByteTokenizer
 
@@ -46,7 +46,7 @@ def main() -> None:
         checkpoint = torch.load(path, map_location="cpu", weights_only=True)
         if checkpoint.get("tokenizer", "byte") != "byte":
             parser.error("only byte-tokenizer checkpoints are supported")
-        backend = checkpoint.get("attention_backend", "auto")
+        backend = canonical_backend(checkpoint.get("attention_backend"))
         model = MiniLM(MiniLMConfig(**checkpoint["config"]))
         model.load_state_dict(checkpoint["model"])
         model.to(args.device).set_attention_backend(backend)

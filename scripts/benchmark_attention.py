@@ -67,8 +67,8 @@ def trial(model: MiniLM, prompt: torch.Tensor, decode_tokens: int, device: str, 
     sample = {}
     if "forward" in phases:
         sample["forward"], _ = timed(device, lambda: model(prompt))
-    if model.blocks[0].attention.backend == "auto":
-        # forward_cached already uses SDPA under "auto"; no distinct decode path.
+    if model.blocks[0].attention.backend == "mha":
+        # forward_cached uses SDPA under "mha"; there is no distinct decode path.
         return sample
     sample["prefill"], (logits, cache) = timed(device, lambda: model.forward_cached(prompt))
     steps = []
@@ -135,7 +135,7 @@ def main() -> None:
     parser.add_argument("--device", choices=("cpu", "mps", "cuda"), default="cpu")
     parser.add_argument("--dtype", choices=tuple(DTYPES), default="float32")
     parser.add_argument("--position", choices=("learned", "rope"), default="learned")
-    parser.add_argument("--backends", type=csv(str), default=["auto", "sdpa", "reference"])
+    parser.add_argument("--backends", type=csv(str), default=["mha", "sdpa", "reference"])
     parser.add_argument("--seq-lens", type=csv(int), default=[128, 256, 512, 1024, 2048])
     parser.add_argument("--batch-sizes", type=csv(int), default=[1, 4, 8])
     parser.add_argument("--decode-tokens", type=int, default=32)

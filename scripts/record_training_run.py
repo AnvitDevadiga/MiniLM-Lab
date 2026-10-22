@@ -6,6 +6,7 @@ from pathlib import Path
 
 import torch
 
+from minilm_lab.model import canonical_backend
 from minilm_lab.provenance import environment, file_sha256, write_record
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,7 +34,7 @@ def main() -> None:
             "dtype": "float32",
             "seed": final["seed"],
             "protocol": args.protocol,
-            "attention_backend": final.get("attention_backend", "auto"),
+            "attention_backend": canonical_backend(final.get("attention_backend")),
             "model_config": final["config"],
             "tokenizer": final["tokenizer"],
             "optimizer": "AdamW lr=3e-4 (scripts/train_tiny.py defaults)",
@@ -58,7 +59,7 @@ def main() -> None:
             "run_summary": json.loads(summary.read_text(encoding="utf-8")) if summary.exists() else None,
         },
     }
-    name = f"training_{args.protocol}_{final.get('attention_backend', 'auto')}_seed{final['seed']}"
+    name = f"training_{args.protocol}_{canonical_backend(final.get('attention_backend'))}_seed{final['seed']}"
     path = write_record(args.output_dir, name, payload)
     print(f"wrote {path}")
 

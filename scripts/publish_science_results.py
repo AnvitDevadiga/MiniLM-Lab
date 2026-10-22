@@ -27,7 +27,7 @@ def main() -> None:
     int8 = read(INT8)
     per_source = {"darwin-1859": read(DARWIN), "einstein-1924": read(EINSTEIN)}
     manifest = read(MANIFEST)
-    checkpoint = torch.load(RUN / "best_checkpoint.pt", map_location="cpu", weights_only=False)
+    checkpoint = torch.load(RUN / "best_checkpoint.pt", map_location="cpu", weights_only=True)
     if not metrics or metrics[-1]["step"] != 1000:
         raise ValueError("expected the completed 1,000-step science run")
     if evaluation["validation_tokens"] < 100000 or benchmark["repeats"] < 3:

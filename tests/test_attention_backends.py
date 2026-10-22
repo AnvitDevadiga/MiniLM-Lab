@@ -1,3 +1,5 @@
+import copy
+
 import pytest
 import torch
 import torch.nn.functional as F
@@ -9,7 +11,7 @@ from minilm_lab.model import (
     reference_causal_attention,
 )
 
-BACKENDS = ("auto", "sdpa", "reference")
+BACKENDS = ("mha", "sdpa", "reference")
 
 
 def small_model(positional_encoding: str = "learned", context_length: int = 32) -> MiniLM:
@@ -160,13 +162,16 @@ def test_backend_gradients_match_float64_oracle(positional_encoding: str) -> Non
 @pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize("use_rope", [False, True])
 def test_attention_layer_passes_gradcheck(backend: str, use_rope: bool) -> None:
-    if backend == "auto" and use_rope:
-        pytest.skip("auto uses the SDPA path for RoPE, covered by sdpa")
     torch.manual_seed(6)
     layer = CausalSelfAttention(MiniLMConfig(context_length=8, embedding_dim=8, num_heads=2)).double()
     layer.backend = backend
     x = torch.randn(2, 5, 8, dtype=torch.float64, requires_grad=True)
     assert torch.autograd.gradcheck(lambda value: layer(value, use_rope=use_rope), (x,))
+    if backend == "mha" and use_rope:
+        # nn.MultiheadAttention cannot apply RoPE, so mha + RoPE runs the SDPA path.
+        sdpa = copy.deepcopy(layer)
+        sdpa.backend = "sdpa"
+        assert torch.equal(layer(x, use_rope=True), sdpa(x, use_rope=True))
 
 
 @pytest.mark.parametrize("backend", BACKENDS)

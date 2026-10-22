@@ -34,7 +34,25 @@ class RMSNorm(nn.Module):
         return x * torch.rsqrt(variance + self.eps).to(dtype=x.dtype) * self.weight
 
 
-ATTENTION_BACKENDS = ("auto", "sdpa", "reference")
+# sdpa: torch scaled_dot_product_attention (default since the first release).
+# mha: the original path that produced every science-v1 result:
+#      nn.MultiheadAttention for learned positions in forward(), SDPA for RoPE
+#      and for forward_cached().
+# reference: explicit softmax(QK^T / sqrt(d)) V for numerical comparison.
+ATTENTION_BACKENDS = ("sdpa", "mha", "reference")
+DEFAULT_ATTENTION_BACKEND = "sdpa"
+# Records and checkpoints written before the first release call the mha path "auto".
+LEGACY_BACKEND_ALIASES = {"auto": "mha"}
+
+
+def canonical_backend(name: str | None) -> str:
+    """Canonical backend name; checkpoints without a backend predate the field and used mha."""
+    if name is None:
+        return "mha"
+    name = LEGACY_BACKEND_ALIASES.get(name, name)
+    if name not in ATTENTION_BACKENDS:
+        raise ValueError(f"attention backend must be one of {ATTENTION_BACKENDS} (or legacy 'auto')")
+    return name
 
 
 def causal_mask(query_length: int, key_length: int, device: torch.device) -> Tensor:
@@ -63,9 +81,7 @@ class CausalSelfAttention(nn.Module):
     def __init__(self, config: MiniLMConfig) -> None:
         super().__init__()
         self.rope_theta = config.rope_theta
-        # "auto" keeps the original paths: nn.MultiheadAttention for learned
-        # positions in forward(), SDPA for RoPE and for forward_cached().
-        self.backend = "auto"
+        self.backend = DEFAULT_ATTENTION_BACKEND
         self.attention = nn.MultiheadAttention(
             config.embedding_dim, config.num_heads, config.dropout, batch_first=True
         )
@@ -129,7 +145,7 @@ class CausalSelfAttention(nn.Module):
         return torch.cat((rotated, x[..., 2 * half :]), dim=-1)
 
     def forward(self, x: Tensor, use_rope: bool = False) -> Tensor:
-        if self.backend == "auto" and not use_rope:
+        if self.backend == "mha" and not use_rope:
             length = x.size(1)
             output, _ = self.attention(x, x, x, attn_mask=self.mask[:length, :length], need_weights=False)
             return output
@@ -197,8 +213,9 @@ class MiniLM(nn.Module):
 
     def set_attention_backend(self, backend: str) -> "MiniLM":
         """Select how attention is computed without changing any weights."""
-        if backend not in ATTENTION_BACKENDS:
-            raise ValueError(f"attention backend must be one of {ATTENTION_BACKENDS}")
+        if backend is None:
+            raise ValueError("attention backend must be named explicitly")
+        backend = canonical_backend(backend)
         for block in self.blocks:
             block.attention.backend = backend
         return self
