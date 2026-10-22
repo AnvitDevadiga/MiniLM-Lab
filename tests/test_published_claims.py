@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from minilm_lab.records import kv_speedups
+
 ROOT = Path(__file__).resolve().parents[1]
 README = (ROOT / "README.md").read_text()
 spec = importlib.util.spec_from_file_location("report", ROOT / "scripts/build_experiment_report.py")
@@ -60,9 +62,10 @@ def test_training_quality_and_step_speed() -> None:
 
 def test_kv_cache_claims() -> None:
     records = report.latest(RECORDS / "kv_cache")
-    cpu = [row["speedup_cached_vs_uncached_sdpa"] for row in records["cpu/float32"]["results"]["grid"]]
+    # Ratios are derived from the timings, never read from stored fields.
+    cpu = [kv_speedups(row)["speedup_cached_vs_uncached_sdpa"] for row in records["cpu/float32"]["results"]["grid"]]
     assert f"{min(cpu):.1f}–{round(max(cpu))}× faster than recomputation on CPU" in README
-    mps = [row["speedup_cached_vs_uncached_sdpa"] for row in records["mps/float32"]["results"]["grid"]]
+    mps = [kv_speedups(row)["speedup_cached_vs_uncached_sdpa"] for row in records["mps/float32"]["results"]["grid"]]
     assert f"({min(mps):.2f}×)" in README
     windows = [r["results"]["window"] for r in records.values()]
     assert all(sum(w["cached"]["refreshed_steps"]) == len(w["cached"]["refreshed_steps"]) - w["context_length"] + w["prompt_len"] for w in windows)
@@ -83,6 +86,11 @@ def test_legacy_v1_values() -> None:
         assert int8[key] == published["quantization"][key]  # deterministic values reproduce exactly
     kv = next(r["results"] for r in current if r["experiment"] == "legacy_kv_cache_benchmark")
     assert f"{published['benchmark']['speedup']:.2f}×) re-measures at {kv['speedup']:.2f}×" in README
+    # The September published speedup is consistent with its own stored samples.
+    bench = published["benchmark"]
+    medians = {mode: statistics.median(bench[f"{mode}_seconds_samples"]) for mode in ("uncached", "cached")}
+    assert medians["uncached"] == bench["uncached_seconds"] and medians["cached"] == bench["cached_seconds"]
+    assert bench["speedup"] == medians["uncached"] / medians["cached"]
     assert f"{published['evaluation']['perplexity']:.2f}" in README
 
 

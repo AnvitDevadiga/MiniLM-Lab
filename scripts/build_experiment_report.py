@@ -12,7 +12,13 @@ import re
 from pathlib import Path
 
 from minilm_lab.model import canonical_backend
-from minilm_lab.records import NAME, load_store, protocol_rows, validate_store
+from minilm_lab.records import (
+    NAME,
+    kv_speedups,
+    load_store,
+    protocol_rows,
+    validate_store,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 RECORDS = ROOT / "experiments/records"
@@ -315,8 +321,14 @@ def mha_mode(row: dict) -> dict:
     return row.get("uncached_mha") or row["uncached_default"]
 
 
+def sdpa_speedup(row: dict) -> float:
+    """Derived from the timings (records.kv_speedups), never read from the stored field."""
+    return kv_speedups(row)["speedup_cached_vs_uncached_sdpa"]
+
+
 def mha_speedup(row: dict) -> float:
-    return row.get("speedup_cached_vs_uncached_mha") or row["speedup_cached_vs_uncached_default"]
+    ratios = kv_speedups(row)
+    return ratios.get("speedup_cached_vs_uncached_mha", ratios.get("speedup_cached_vs_uncached_default"))
 
 
 def kv_table(key: str, record: dict) -> str:
@@ -331,7 +343,7 @@ def kv_table(key: str, record: dict) -> str:
         same = "yes" if all(row["token_identical_to_cached"].values()) else "**no**"
         lines.append(
             f"| {row['batch']} | {row['prompt_len']} | {row['cached']['total_ms']['median']:.1f} | {row['uncached_sdpa']['total_ms']['median']:.1f} "
-            f"| {mha_mode(row)['total_ms']['median']:.1f} | {row['speedup_cached_vs_uncached_sdpa']:.2f}× | {mha_speedup(row):.2f}× "
+            f"| {mha_mode(row)['total_ms']['median']:.1f} | {sdpa_speedup(row):.2f}× | {mha_speedup(row):.2f}× "
             f"| {row['cached']['decode_ms_per_step']['median']:.2f} | {same} |"
         )
     window = results["window"]
@@ -340,7 +352,7 @@ def kv_table(key: str, record: dict) -> str:
         "",
         (f"Past the window (context {window['context_length']}, prompt {window['prompt_len']}, {window['new_tokens']} tokens): "
         f"{refreshed} of {window['new_tokens']} cached steps rebuild the cache; cached {window['cached']['total_ms']['median']:.1f} ms vs "
-        f"uncached SDPA {window['uncached_sdpa']['total_ms']['median']:.1f} ms ({window['speedup_cached_vs_uncached_sdpa']:.2f}×); "
+        f"uncached SDPA {window['uncached_sdpa']['total_ms']['median']:.1f} ms ({sdpa_speedup(window):.2f}×); "
         f"tokens identical: {'yes' if all(window['token_identical_to_cached'].values()) else 'no'}."),
     ]
     return "\n".join(lines)
@@ -448,8 +460,8 @@ def kv_figure(records: dict[str, dict]) -> tuple[str, str]:
     for key, record in records.items():
         series = []
         for color, batch in zip(SERIES, record["settings"]["batch_sizes"]):
-            pts = [(max(row["prompt_len"], 1), row["speedup_cached_vs_uncached_sdpa"],
-                    f"{key} B={batch} prompt={row['prompt_len']}: cached is {row['speedup_cached_vs_uncached_sdpa']:.2f}x uncached SDPA")
+            pts = [(max(row["prompt_len"], 1), sdpa_speedup(row),
+                    f"{key} B={batch} prompt={row['prompt_len']}: cached is {sdpa_speedup(row):.2f}x uncached SDPA")
                    for row in record["results"]["grid"] if row["batch"] == batch]
             series.append((f"batch {batch}", color, pts))
         panels.append((key, series, "uncached ÷ cached total time", lambda v: f"{v:g}×", 1.0, "prompt length (tokens)"))
@@ -471,7 +483,7 @@ def replace_section(text: str, name: str, content: str) -> str:
 
 
 def main() -> None:
-    problems = validate_store(load_store(ROOT, RECORDS))
+    problems = validate_store(load_store(ROOT, RECORDS), strict=True)
     if problems:
         # Fail closed: never report from records with unresolved provenance problems.
         raise SystemExit("records failed validation (run scripts/validate_records.py):\n" + "\n".join(problems))

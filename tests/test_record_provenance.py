@@ -179,7 +179,9 @@ def test_model_identity_mismatch_is_rejected(records: Path) -> None:
     training["results"]["best_model_identity_sha256"] = "a" * 64
     write(records, V1_MHA_42, training)
     mutate_evaluation(records, V1_EVAL, lambda r: [row.update(model_identity_sha256="b" * 64) for row in r["results"] if row["seed"] == 42 and row["attention_backend"] == "auto"])
-    assert any("model identity differs" in p for p in problems(records))
+    # The forged declared value already contradicts the artifact/baseline identity.
+    found = problems(records)
+    assert any("model identity sources disagree" in p for p in found)
 
 
 def test_training_data_outside_protocol_is_rejected(records: Path) -> None:
