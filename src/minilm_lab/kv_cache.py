@@ -28,3 +28,27 @@ def generate_with_kv_cache(model, prompt: str, tokenizer: ByteTokenizer, max_new
         else:
             logits, cache = model.forward_cached(next_token, cache)
     return tokenizer.decode(tokens[0].tolist())
+
+
+@torch.no_grad()
+def greedy_decode(model, input_ids: torch.Tensor, max_new_tokens: int, use_cache: bool = True) -> torch.Tensor:
+    """Deterministic batched argmax decoding, with or without the KV cache.
+
+    Both modes see the same sliding window of the last context_length tokens,
+    so their outputs are directly comparable.
+    """
+    if input_ids.dim() != 2 or input_ids.size(1) < 1:
+        raise ValueError("input_ids must have shape (batch, length >= 1)")
+    model.eval()
+    window = model.config.context_length
+    tokens = input_ids
+    cache = None
+    for index in range(max_new_tokens):
+        if not use_cache:
+            logits, _ = model(tokens[:, -window:])
+        elif cache is None or tokens.size(1) > window:
+            logits, cache = model.forward_cached(tokens[:, -window:])
+        else:
+            logits, cache = model.forward_cached(tokens[:, -1:], cache)
+        tokens = torch.cat((tokens, logits[:, -1].argmax(dim=-1, keepdim=True)), dim=1)
+    return tokens
