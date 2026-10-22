@@ -227,6 +227,32 @@ def select_training(store: Store, problems: list[str]) -> dict[TrainingIdentity,
 # ---------------------------------------------------------------- evaluation provenance
 
 
+def attested_identities(store: Store, problems: list[str]) -> dict[str, str]:
+    """checkpoint file SHA-256 -> model identity, from current attestation records."""
+    attested: dict[str, str] = {}
+    for key, record in store.current("identity"):
+        for row in record["results"]["attested"]:
+            training = store.records.get(row["training_record"])
+            if training is None or row["training_record"] in store.superseded:
+                problems.append(f"{key}: attests {row['training_record']}, which is not a current training record")
+                continue
+            if training["results"].get(f"{row['kind']}_checkpoint_sha256") != row["checkpoint_sha256"]:
+                problems.append(f"{key}: {row['kind']} checkpoint hash differs from {row['training_record']}")
+            previous = attested.setdefault(row["checkpoint_sha256"], row["model_identity_sha256"])
+            if previous != row["model_identity_sha256"]:
+                problems.append(f"{key}: checkpoint {row['checkpoint_sha256'][:12]} attested with two model identities")
+        for row in record["results"].get("regeneration_checks", []):
+            original = attested.get(row["original_checkpoint_sha256"])
+            if row["model_identity_equal"] != (original == row["model_identity_sha256"]):
+                problems.append(f"{key}: regeneration check for {row['training_record']} is inconsistent with its attestation")
+    return attested
+
+
+def model_identity_of(store: Store, training: dict) -> str | None:
+    own = training["results"].get("best_model_identity_sha256")
+    return own or attested_identities(store, []).get(training["results"].get("best_checkpoint_sha256"))
+
+
 def training_by_checkpoint(store: Store) -> dict[str, list[tuple[str, dict]]]:
     index: dict[str, list[tuple[str, dict]]] = {}
     for key, record in store.current("training"):
@@ -261,7 +287,7 @@ def resolve_row(store: Store, where: str, row: dict, protocol: str | None, probl
         problems.append(f"{where}: selected step {row['selected_step']} but training record {key} selected {training['results']['best_step']}")
     if "corpus_sha256" in row and row["corpus_sha256"] != settings["data"].get("corpus_sha256_in_checkpoint"):
         problems.append(f"{where}: corpus identity differs from training record {key}")
-    a, b = row.get("model_identity_sha256"), training["results"].get("best_model_identity_sha256")
+    a, b = row.get("model_identity_sha256"), model_identity_of(store, training)
     if a and b and a != b:
         problems.append(f"{where}: model identity differs from training record {key}")
     return key, training
@@ -392,6 +418,7 @@ def validate_store(store: Store) -> list[str]:
         if key not in store.superseded and record["experiment"] in {"attention_backends", "kv_cache_scaling", "training_step"}:
             check_benchmark(key, record, problems)
     select_training(store, problems)
+    attested_identities(store, problems)
     index = training_by_checkpoint(store)
     for key, record in store.current("evaluation"):
         check_evaluation(store, key, record, problems, index)
