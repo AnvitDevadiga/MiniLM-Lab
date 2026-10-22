@@ -1,5 +1,6 @@
 import pytest
 import torch
+import torch.nn.functional as F
 
 from minilm_lab import MiniLM, MiniLMConfig
 from minilm_lab.model import (
@@ -29,6 +30,15 @@ def test_causal_mask_is_bottom_right_aligned() -> None:
     # Two cached keys, two new queries: query 0 is absolute position 2.
     expected = torch.tensor([[True, True, True, False], [True, True, True, True]])
     assert torch.equal(causal_mask(2, 4, torch.device("cpu")), expected)
+
+
+def test_reference_attention_keeps_float64_precision() -> None:
+    torch.manual_seed(0)
+    q, k, v = (torch.randn(1, 2, 6, 8, dtype=torch.float64) for _ in range(3))
+    output = reference_causal_attention(q, k, v)
+    assert output.dtype == torch.float64
+    expected = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+    assert (output - expected).abs().max() < 1e-12
 
 
 def test_reference_attention_matches_hand_computed_softmax() -> None:
@@ -125,3 +135,49 @@ def test_rope_half_precision_error_is_at_rounding_level(dtype: torch.dtype) -> N
     rounding = (exact.to(dtype).double() - exact).abs().max()
     # Before computing angles in float32, bf16 error at 2048 positions was ~7.3.
     assert error < 4 * rounding
+
+
+@pytest.mark.parametrize("positional_encoding", ["learned", "rope"])
+def test_backend_gradients_match_float64_oracle(positional_encoding: str) -> None:
+    model = small_model(positional_encoding).train()
+    tokens = torch.randint(0, 64, (3, 32))
+    targets = torch.randint(0, 64, (3, 32))
+
+    def gradients(backend: str, dtype: torch.dtype) -> dict[str, torch.Tensor]:
+        model.to(dtype).set_attention_backend(backend).zero_grad(set_to_none=True)
+        model(tokens, targets)[1].backward()
+        return {name: p.grad.double().clone() for name, p in model.named_parameters() if p.grad is not None}
+
+    oracle = gradients("reference", torch.float64)
+    for backend in BACKENDS:
+        grads = gradients(backend, torch.float32)
+        assert grads.keys() == oracle.keys()
+        for name, grad in grads.items():
+            scale = oracle[name].abs().max().clamp_min(1e-8)
+            assert (grad - oracle[name]).abs().max() / scale < 1e-4, (backend, name)
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("use_rope", [False, True])
+def test_attention_layer_passes_gradcheck(backend: str, use_rope: bool) -> None:
+    if backend == "auto" and use_rope:
+        pytest.skip("auto uses the SDPA path for RoPE, covered by sdpa")
+    torch.manual_seed(6)
+    layer = CausalSelfAttention(MiniLMConfig(context_length=8, embedding_dim=8, num_heads=2)).double()
+    layer.backend = backend
+    x = torch.randn(2, 5, 8, dtype=torch.float64, requires_grad=True)
+    assert torch.autograd.gradcheck(lambda value: layer(value, use_rope=use_rope), (x,))
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_attention_dropout_only_in_training(backend: str) -> None:
+    torch.manual_seed(8)
+    config = MiniLMConfig(vocab_size=64, context_length=16, embedding_dim=32, num_layers=1, num_heads=4, dropout=0.5)
+    model = MiniLM(config).set_attention_backend(backend)
+    tokens = torch.randint(0, 64, (2, 16))
+    model.eval()
+    assert torch.equal(model(tokens)[0], model(tokens)[0])
+    model.train()
+    attention = model.blocks[0].attention
+    x = torch.randn(2, 16, 32)
+    assert not torch.allclose(attention(x), attention(x))

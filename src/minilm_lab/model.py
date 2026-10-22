@@ -45,15 +45,18 @@ def causal_mask(query_length: int, key_length: int, device: torch.device) -> Ten
     return key_positions[None, :] <= query_positions[:, None]
 
 
-def reference_causal_attention(q: Tensor, k: Tensor, v: Tensor) -> Tensor:
+def reference_causal_attention(q: Tensor, k: Tensor, v: Tensor, dropout_p: float = 0.0) -> Tensor:
     """Explicit softmax(QK^T / sqrt(d)) V that materializes the full score matrix.
 
-    Matmuls run in the input dtype; the softmax runs in float32, as in common
-    eager implementations. Queries are aligned to the last key positions.
+    Matmuls run in the input dtype; the softmax runs in at least float32 (as in
+    common eager implementations), never below the input precision, so float64
+    inputs stay float64. Queries are aligned to the last key positions.
     """
-    scores = (q @ k.transpose(-2, -1)).float() * q.size(-1) ** -0.5
+    scores = q @ k.transpose(-2, -1)
+    scores = scores.to(torch.promote_types(scores.dtype, torch.float32)) * q.size(-1) ** -0.5
     scores = scores.masked_fill(~causal_mask(q.size(-2), k.size(-2), q.device), float("-inf"))
-    return scores.softmax(dim=-1).to(v.dtype) @ v
+    weights = scores.softmax(dim=-1).to(v.dtype)
+    return F.dropout(weights, dropout_p) @ v if dropout_p else weights @ v
 
 
 class CausalSelfAttention(nn.Module):
@@ -85,14 +88,17 @@ class CausalSelfAttention(nn.Module):
         return q, k, v
 
     def _attend(self, q: Tensor, k: Tensor, v: Tensor) -> Tensor:
+        # Same attention-weight dropout as nn.MultiheadAttention in training.
+        dropout = self.attention.dropout if self.training else 0.0
         if self.backend == "reference":
-            output = reference_causal_attention(q, k, v)
+            output = reference_causal_attention(q, k, v, dropout)
         elif q.size(2) == k.size(2):
-            output = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+            output = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout, is_causal=True)
         else:
             # Non-square is_causal is upper-left aligned in PyTorch. Align
             # each query with its absolute position in the concatenated keys.
-            output = F.scaled_dot_product_attention(q, k, v, attn_mask=causal_mask(q.size(2), k.size(2), q.device))
+            mask = causal_mask(q.size(2), k.size(2), q.device)
+            output = F.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=dropout)
         return self.attention.out_proj(output.transpose(1, 2).reshape(q.size(0), q.size(2), -1))
 
     def forward_cached(
@@ -127,8 +133,7 @@ class CausalSelfAttention(nn.Module):
             length = x.size(1)
             output, _ = self.attention(x, x, x, attn_mask=self.mask[:length, :length], need_weights=False)
             return output
-        # RoPE needs explicit q/k access. Attention dropout is not applied on
-        # this path (the published configuration uses dropout=0).
+        # RoPE needs explicit q/k access, so it always uses _attend.
         return self._attend(*self._project(x, use_rope, 0))
 
 
